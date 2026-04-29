@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual env
+.venv/
+venv/
+
+# Env
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large artifacts — keep .gitkeep visible, ignore everything else
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+exports/*
+!exports/.gitkeep

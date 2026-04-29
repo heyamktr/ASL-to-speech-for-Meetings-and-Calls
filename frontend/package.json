@@ -1,0 +1,38 @@
+{
+  "name": "asl-to-speech-extension",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Chrome extension that translates ASL signs into voice during video calls.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n js,css \"npm:dev:js\" \"npm:dev:css\"",
+    "dev:js": "node esbuild.config.mjs --watch",
+    "dev:css": "postcss src/styles/globals.css -o dist/styles.css --watch",
+    "build": "npm run build:css && npm run build:js",
+    "build:js": "node esbuild.config.mjs",
+    "build:css": "postcss src/styles/globals.css -o dist/styles.css",
+    "lint": "eslint src --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\""
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.270",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.0",
+    "esbuild": "^0.23.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.35.0",
+    "postcss": "^8.4.45",
+    "postcss-cli": "^11.0.0",
+    "prettier": "^3.3.3",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.5.4"
+  }
+}

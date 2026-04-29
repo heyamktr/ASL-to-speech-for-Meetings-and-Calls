@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "ASL-to-Speech",
+  "version": "0.0.1",
+  "description": "Translate ASL signs into voice and text during video calls.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "https://*.zoom.us/*",
+    "https://*.facebook.com/*",
+    "https://teams.microsoft.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://meet.google.com/*",
+        "https://*.zoom.us/*",
+        "https://*.facebook.com/*",
+        "https://teams.microsoft.com/*"
+      ],
+      "js": ["content/index.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/index.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["injected/inject.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

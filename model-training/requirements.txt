@@ -1,0 +1,11 @@
+torch
+tensorflow
+mediapipe
+opencv-python
+numpy
+pandas
+jupyter
+onnx
+tqdm
+scikit-learn
+matplotlib

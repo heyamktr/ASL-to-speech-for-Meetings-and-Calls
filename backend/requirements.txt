@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+gunicorn
+websockets
+redis
+onnxruntime
+numpy
+python-dotenv
