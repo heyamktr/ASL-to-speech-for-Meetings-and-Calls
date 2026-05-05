@@ -12,3 +12,17 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Data & raw videos
+WLASL/
+model-training/raw_data/
+model-training/data/splits/
+
+# MediaPipe model files
+*.task
