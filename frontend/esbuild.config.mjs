@@ -8,6 +8,7 @@ const entries = {
   "content/index": "src/content/index.tsx",
   "popup/index": "src/popup/index.tsx",
   "injected/inject": "src/injected/inject.ts",
+  "injected/mediapipe-bridge": "src/injected/mediapipe-bridge.ts"
 };
 
 async function copyStatic() {
@@ -16,7 +17,10 @@ async function copyStatic() {
   await copyFile("public/manifest.json", "dist/manifest.json");
   await copyFile("src/popup/index.html", "dist/popup/index.html");
   await cp("public/icons", "dist/icons", { recursive: true }).catch(() => {});
+  await cp("public/icons", "dist/icons", { recursive: true }).catch(() => {});
+  await cp("public/mediapipe", "dist/mediapipe", { recursive: true }).catch(() => {}); // add this
 }
+
 
 const ctx = await esbuild.context({
   entryPoints: entries,

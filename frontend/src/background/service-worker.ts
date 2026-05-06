@@ -1,6 +1,3 @@
-// Background service worker — runs in the extension context.
-// Handles cross-tab state, message routing, and lifecycle events.
+console.log('[ASL Background] Service worker started');
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("ASL-to-Speech extension installed.");
-});
+export {};

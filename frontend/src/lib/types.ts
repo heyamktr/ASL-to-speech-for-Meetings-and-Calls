@@ -11,3 +11,23 @@ export interface PredictionResult {
   confidence: number;
   timestamp: number;
 }
+
+// Outgoing: content script → backend
+export interface LandmarkMessage {
+  landmarks: number[];   // exactly 63 values: [x0,y0,z0, x1,y1,z1, ..., x20,y20,z20]
+  session_id: string;
+  timestamp: number;     // Date.now() — echoed back for RTT measurement
+}
+
+// Incoming: backend → content script
+export interface PredictionMessage {
+  prediction: string;
+  confidence: number;    // 0.0–1.0
+  timestamp: number;     // echoed from the request
+}
+
+// Popup ↔ content script messaging
+export type ExtensionMessage =
+  | { type: 'TOGGLE'; enabled: boolean }
+  | { type: 'STATUS_REQUEST' }
+  | { type: 'STATUS_RESPONSE'; enabled: boolean; wsConnected: boolean };
