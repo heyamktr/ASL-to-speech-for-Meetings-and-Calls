@@ -11,8 +11,9 @@ Architecture changes from v1
 * Sequence lengths propagated so attention ignores padding frames.
 * Random temporal crop each epoch (training diversity).
 * 4-crop test-time averaging at validation (free accuracy boost).
-* hidden_size 128, dropout 0.5, weight_decay 5e-4, temporal frame dropout 15%.
+* hidden_size 96, dropout 0.5, weight_decay 1e-3, temporal frame dropout 25%.
 * Adam eps 1e-3, label_smoothing 0.1.
+* Mixup (alpha=0.4) and scale jitter (±20%) added to training augmentation.
 """
 
 import json
@@ -36,16 +37,18 @@ INPUT_DIM    = 146   # 63 rh + 1 rh_pres + 63 lh + 1 lh_pres + 18 pose
 BATCH_SIZE   = 32
 EPOCHS       = 300
 LR           = 1e-3
-WEIGHT_DECAY = 5e-4
-HIDDEN_SIZE  = 128
+WEIGHT_DECAY = 1e-3
+HIDDEN_SIZE  = 96
 NUM_LAYERS   = 2
 DROPOUT      = 0.5
 EARLY_STOP_PATIENCE = 30
 
 # Augmentation
-NOISE_STD       = 0.04
+NOISE_STD       = 0.07
 FLIP_PROB       = 0.5
-FRAME_DROP_PROB = 0.15   # probability of zeroing out any single frame (temporal dropout)
+FRAME_DROP_PROB = 0.25   # probability of zeroing out any single frame (temporal dropout)
+SCALE_JITTER    = 0.2    # coordinate scale drawn from U[1-SCALE_JITTER, 1+SCALE_JITTER]
+MIXUP_ALPHA     = 0.4    # Beta distribution parameter for mixup; 0 disables
 
 # Test-time augmentation: average logits over this many temporal crops at val.
 TTA_CROPS = 4
@@ -122,6 +125,12 @@ def augment_batch(x: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
     noise[pad_mask]  = 0   # don't jitter padding
     noise[frame_drop] = 0  # already zeroed; keep consistent
     x = x + noise
+
+    # Scale jitter: random per-sample scale on coordinate dims only (not presence bits).
+    scale = 1.0 + (torch.rand(B, 1, 1, device=x.device) * 2 - 1) * SCALE_JITTER
+    x[:, :, :63]    *= scale
+    x[:, :, 64:127] *= scale
+    x[:, :, 128:]   *= scale
 
     # Horizontal flip for a random subset of the batch
     flip = torch.rand(B, device=x.device) < FLIP_PROB
@@ -300,8 +309,16 @@ def train(resume: bool = True) -> None:
 
             x_crop = augment_batch(x_crop, crop_lens)
 
-            logits = model(x_crop, lengths=crop_lens)
-            loss   = criterion(logits, y_batch)
+            if MIXUP_ALPHA > 0:
+                lam = np.random.beta(MIXUP_ALPHA, MIXUP_ALPHA)
+                idx = torch.randperm(x_crop.size(0), device=device)
+                x_crop = lam * x_crop + (1 - lam) * x_crop[idx]
+                y_b    = y_batch[idx]
+                logits = model(x_crop, lengths=crop_lens)
+                loss   = lam * criterion(logits, y_batch) + (1 - lam) * criterion(logits, y_b)
+            else:
+                logits = model(x_crop, lengths=crop_lens)
+                loss   = criterion(logits, y_batch)
 
             optimizer.zero_grad()
             loss.backward()
