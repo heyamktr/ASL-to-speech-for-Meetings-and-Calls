@@ -12,6 +12,7 @@ Architecture changes from v1
 * Random temporal crop each epoch (training diversity).
 * 4-crop test-time averaging at validation (free accuracy boost).
 * hidden_size 96, dropout 0.5, weight_decay 1e-3, temporal frame dropout 25%.
+* Velocity features: frame-to-frame diffs appended (146 pos + 146 vel = 292-dim).
 * Adam eps 1e-3, label_smoothing 0.1.
 * Mixup (alpha=0.4) and scale jitter (±20%) added to training augmentation.
 """
@@ -33,12 +34,12 @@ CKPT_DIR   = _REPO_ROOT / "checkpoints"
 
 # ── Hyperparameters ────────────────────────────────────────────────────────────
 SEQ_LEN      = 100   # frames fed to the model per forward pass
-INPUT_DIM    = 146   # 63 rh + 1 rh_pres + 63 lh + 1 lh_pres + 18 pose
+INPUT_DIM    = 292   # 146 position + 146 velocity (frame-to-frame diff)
 BATCH_SIZE   = 32
 EPOCHS       = 300
 LR           = 1e-3
 WEIGHT_DECAY = 1e-3
-HIDDEN_SIZE  = 96
+HIDDEN_SIZE  = 128
 NUM_LAYERS   = 2
 DROPOUT      = 0.5
 EARLY_STOP_PATIENCE = 30
@@ -141,6 +142,17 @@ def augment_batch(x: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
     return x
 
 
+def add_velocity(x: torch.Tensor) -> torch.Tensor:
+    """Append frame-to-frame differences to (B, T, 146) → (B, T, 292).
+
+    Velocity must be computed after augmentation so flips/scales stay consistent.
+    The first frame gets a zero velocity (no prior frame available).
+    """
+    vel = torch.diff(x, dim=1)                          # (B, T-1, 146)
+    vel = torch.cat([torch.zeros_like(x[:, :1, :]), vel], dim=1)  # (B, T, 146)
+    return torch.cat([x, vel], dim=2)                   # (B, T, 292)
+
+
 # ── Dataset ────────────────────────────────────────────────────────────────────
 class LandmarkDataset(Dataset):
     """Loads stored (N, STORED_LEN, 144) arrays and builds 146-dim features.
@@ -211,6 +223,7 @@ def evaluate(
                 x_stored, len_batch, SEQ_LEN,
                 mode="uniform", crop_idx=crop_i, num_crops=num_crops,
             )
+            x_crop = add_velocity(x_crop)
             all_logits.append(model(x_crop, lengths=crop_lens))
 
         logits = torch.stack(all_logits).mean(0)   # (B, num_classes)
@@ -308,6 +321,7 @@ def train(resume: bool = True) -> None:
             )
 
             x_crop = augment_batch(x_crop, crop_lens)
+            x_crop = add_velocity(x_crop)
 
             if MIXUP_ALPHA > 0:
                 lam = np.random.beta(MIXUP_ALPHA, MIXUP_ALPHA)
