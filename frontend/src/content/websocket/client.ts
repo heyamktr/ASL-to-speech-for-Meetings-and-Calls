@@ -1,23 +1,30 @@
-// WebSocket client to the FastAPI inference backend.
+import type { PredictionMessage } from '../../lib/types';
 
-export class InferenceSocket {
-  private ws: WebSocket | null = null;
+export class WSClient {
+  private sessionId: string;
+  private onPrediction: (msg: PredictionMessage) => void;
 
-  connect(url: string): void {
-    this.ws = new WebSocket(url);
-    // TODO: wire up open/message/close/error handlers
+  constructor(onPrediction: (msg: PredictionMessage) => void) {
+    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    this.onPrediction = onPrediction;
   }
 
-  sendLandmarks(_landmarks: number[]): void {
-    // TODO: send a single frame's 63 numbers
+  connect(): void {
+    console.log('[ASL WS] Stub mode — Dev B server not available yet');
   }
 
-  onWord(_callback: (word: string) => void): void {
-    // TODO: subscribe to predicted-word messages from the server
+  disconnect(): void {}
+
+  sendLandmarks(landmarks: number[]): void {
+    console.log('[ASL WS] Would send:', {
+      landmarks: landmarks.slice(0, 9),
+      total: landmarks.length,
+      session_id: this.sessionId,
+      timestamp: Date.now(),
+    });
   }
 
-  close(): void {
-    this.ws?.close();
-    this.ws = null;
+  get isConnected(): boolean {
+    return false;
   }
 }
