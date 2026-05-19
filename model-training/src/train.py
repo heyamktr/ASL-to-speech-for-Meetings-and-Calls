@@ -22,7 +22,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
+from torch.optim.swa_utils import AveragedModel
 from torch.utils.data import DataLoader, Dataset
 
 from src.models.lstm import SignGRU
@@ -50,6 +52,13 @@ FLIP_PROB       = 0.5
 FRAME_DROP_PROB = 0.25   # probability of zeroing out any single frame (temporal dropout)
 SCALE_JITTER    = 0.2    # coordinate scale drawn from U[1-SCALE_JITTER, 1+SCALE_JITTER]
 MIXUP_ALPHA     = 0.4    # Beta distribution parameter for mixup; 0 disables
+TIME_WARP_PROB  = 0.5    # probability of resampling the batch at random speed
+TIME_WARP_RANGE = (0.8, 1.2)  # speed multiplier range for time warping
+
+# Stochastic Weight Averaging — average model weights across late-stage epochs.
+SWA_START_EPOCH = 120    # epoch to switch from plateau scheduler to SWA phase
+SWA_LR          = 5e-4   # constant LR during SWA phase
+SWA_MIN_EPOCHS  = 40     # don't allow early stopping until N SWA epochs collected
 
 # Test-time augmentation: average logits over this many temporal crops at val.
 TTA_CROPS = 4
@@ -151,6 +160,27 @@ def add_velocity(x: torch.Tensor) -> torch.Tensor:
     vel = torch.diff(x, dim=1)                          # (B, T-1, 146)
     vel = torch.cat([torch.zeros_like(x[:, :1, :]), vel], dim=1)  # (B, T, 146)
     return torch.cat([x, vel], dim=2)                   # (B, T, 292)
+
+
+def time_warp(x: torch.Tensor) -> torch.Tensor:
+    """Random temporal stretch/compress for the whole batch.
+
+    Resamples (B, T, D) at speed ∈ TIME_WARP_RANGE then back to T frames.
+    Simulates signer-to-signer tempo variation — a major source of within-class
+    variance in ASL that the existing crops/flip/noise don't address.
+
+    Padding frames get smoothed slightly into the active region; this is a minor
+    distortion in exchange for much stronger augmentation.
+    """
+    if torch.rand(1).item() > TIME_WARP_PROB:
+        return x
+    B, T, D = x.shape
+    s = float(np.random.uniform(*TIME_WARP_RANGE))
+    new_len = max(2, int(T / s))
+    z = x.transpose(1, 2)                                       # (B, D, T)
+    z = F.interpolate(z, size=new_len, mode="linear", align_corners=False)
+    z = F.interpolate(z, size=T,       mode="linear", align_corners=False)
+    return z.transpose(1, 2)
 
 
 # ── Dataset ────────────────────────────────────────────────────────────────────
@@ -271,6 +301,11 @@ def train(resume: bool = True) -> None:
         optimizer, mode="min", factor=0.5, patience=15,
     )
 
+    # SWA wrapper — averages weights across late-stage epochs.
+    swa_model    = AveragedModel(model)
+    swa_active   = False
+    swa_epochs   = 0
+
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
     # Early stopping and checkpointing are driven by val_loss, not val_acc.
     # With only 238 val samples, accuracy is very noisy (1% = 2.4 samples);
@@ -320,6 +355,7 @@ def train(resume: bool = True) -> None:
                 x_stored, len_batch, SEQ_LEN, mode="random",
             )
 
+            x_crop = time_warp(x_crop)
             x_crop = augment_batch(x_crop, crop_lens)
             x_crop = add_velocity(x_crop)
 
@@ -346,15 +382,29 @@ def train(resume: bool = True) -> None:
         train_loss /= train_total
         train_acc   = train_correct / train_total
 
-        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-        scheduler.step(val_loss)
-        current_lr = optimizer.param_groups[0]["lr"]
+        # Switch to SWA phase: constant LR + start weight averaging.
+        if epoch == SWA_START_EPOCH and not swa_active:
+            for g in optimizer.param_groups:
+                g["lr"] = SWA_LR
+            swa_active = True
+            print(f"[SWA] entering SWA phase at epoch {epoch} "
+                  f"(constant lr={SWA_LR:.2e})")
 
+        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+
+        if swa_active:
+            swa_model.update_parameters(model)
+            swa_epochs += 1
+        else:
+            scheduler.step(val_loss)
+
+        current_lr = optimizer.param_groups[0]["lr"]
+        tag = " [SWA]" if swa_active else ""
         print(
             f"Epoch {epoch:3d}/{EPOCHS} | "
             f"train loss {train_loss:.4f}  acc {train_acc:.3f} | "
             f"val loss {val_loss:.4f}  acc {val_acc:.3f} | "
-            f"lr {current_lr:.2e}"
+            f"lr {current_lr:.2e}{tag}"
         )
 
         if val_acc > best_val_acc:
@@ -383,10 +433,41 @@ def train(resume: bool = True) -> None:
         else:
             epochs_no_imp += 1
 
-        if epochs_no_imp >= EARLY_STOP_PATIENCE:
+        # Don't allow early stopping until SWA has had enough epochs to average.
+        can_early_stop = (not swa_active) or swa_epochs >= SWA_MIN_EPOCHS
+        if epochs_no_imp >= EARLY_STOP_PATIENCE and can_early_stop:
             print(f"\nEarly stopping at epoch {epoch} "
                   f"(no improvement for {EARLY_STOP_PATIENCE} epochs)")
             break
+
+    # ── Evaluate the SWA-averaged model and keep whichever is better ──────────
+    if swa_active and swa_epochs > 0:
+        print(f"\n[SWA] evaluating averaged model ({swa_epochs} epochs averaged)")
+        swa_val_loss, swa_val_acc = evaluate(swa_model, val_loader, criterion, device)
+        print(f"[SWA] val_loss={swa_val_loss:.4f}  val_acc={swa_val_acc:.3f}  "
+              f"(plateau best: val_loss={best_val_loss:.4f}  val_acc={best_val_acc:.3f})")
+
+        if swa_val_loss < best_val_loss:
+            ckpt = {
+                "epoch":       epoch,
+                "model_state": swa_model.module.state_dict(),
+                "val_acc":     swa_val_acc,
+                "val_loss":    swa_val_loss,
+                "config": {
+                    "input_size":  INPUT_DIM,
+                    "hidden_size": HIDDEN_SIZE,
+                    "num_layers":  NUM_LAYERS,
+                    "dropout":     DROPOUT,
+                    "num_classes": NUM_CLASSES,
+                },
+                "is_swa": True,
+            }
+            torch.save(ckpt, CKPT_DIR / "best.pt")
+            best_val_loss = swa_val_loss
+            best_val_acc  = max(best_val_acc, swa_val_acc)
+            print(f"[SWA] saved averaged model as best.pt")
+        else:
+            print(f"[SWA] regular checkpoint was better; SWA discarded")
 
     print(f"\nTraining complete. Best val_loss={best_val_loss:.4f}  best val_acc={best_val_acc:.3f}")
     print(f"Checkpoint: {CKPT_DIR / 'best.pt'}")
