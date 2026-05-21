@@ -1,9 +1,11 @@
 export interface StoredSettings {
   enabled: boolean;
+  backendUrl?: string;
 }
 
 const DEFAULTS: StoredSettings = {
   enabled: false,
+  backendUrl: 'ws://localhost:8000/ws',
 };
 
 export async function getSettings(): Promise<StoredSettings> {

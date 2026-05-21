@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 DUMMY_PREDICTION = "hello"
 DUMMY_CONFIDENCE = 0.99
-LANDMARK_COUNT = 63
+LANDMARK_COUNT = 258  # 33 pose landmarks (x,y,z,visibility) + 21 left hand (x,y,z) + 21 right hand (x,y,z)
+# = (33 × 4) + (21 × 3) + (21 × 3) = 132 + 63 + 63 = 258
 
 
 def _is_number(value: Any) -> bool:
@@ -27,7 +28,7 @@ def _validate_message(payload: Any) -> tuple[list[float], str, int | float]:
     timestamp = payload.get("timestamp")
 
     if not isinstance(landmarks, list) or len(landmarks) != LANDMARK_COUNT:
-        raise ValueError("landmarks must be a list of exactly 63 numbers")
+        raise ValueError("landmarks must be a list of exactly 258 numbers")
     if not all(_is_number(value) for value in landmarks):
         raise ValueError("landmarks must contain only numbers")
     if not isinstance(session_id, str) or not session_id.strip():

@@ -14,7 +14,7 @@ export interface PredictionResult {
 
 // Outgoing: content script → backend
 export interface LandmarkMessage {
-  landmarks: number[];   // exactly 63 values: [x0,y0,z0, x1,y1,z1, ..., x20,y20,z20]
+  landmarks: number[];   // exactly 258 values: 33 pose (x,y,z,visibility) + 21 left hand (x,y,z) + 21 right hand (x,y,z)
   session_id: string;
   timestamp: number;     // Date.now() — echoed back for RTT measurement
 }

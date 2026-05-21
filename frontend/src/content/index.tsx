@@ -18,7 +18,10 @@ async function start(): Promise<void> {
   isRunning = true;
   console.log("[ASL] Starting...");
 
-  wsClient = new WSClient(onPrediction);
+  const settings = await getSettings();
+  const wsUrl = settings.backendUrl || "ws://localhost:8000/ws";
+
+  wsClient = new WSClient(onPrediction, wsUrl);
   wsClient.connect();
 
   tracker = new HandTracker((landmarks) => {

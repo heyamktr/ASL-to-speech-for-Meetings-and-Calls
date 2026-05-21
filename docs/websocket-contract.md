@@ -20,7 +20,7 @@ Sent from the browser extension to the FastAPI backend.
 
 ```json
 {
-  "landmarks": [0.0, 0.1, 0.2],
+  "landmarks": [0.0, 0.1, 0.2, ...],
   "session_id": "dev-session-123",
   "timestamp": 1710000000000
 }
@@ -30,7 +30,7 @@ Fields:
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `landmarks` | `number[]` | Yes | Exactly 63 numbers: 21 hand landmarks times `x`, `y`, `z`. Raw video frames must never be sent. |
+| `landmarks` | `number[]` | Yes | Exactly 258 numbers: 33 pose landmarks (x,y,z,visibility) + 21 left hand landmarks (x,y,z) + 21 right hand landmarks (x,y,z). = (33 × 4) + (21 × 3) + (21 × 3) = 258. Raw video frames must never be sent. |
 | `session_id` | `string` | Yes | Stable ID for the current extension/user session. |
 | `timestamp` | `number` | Yes | Browser-created timestamp. The server echoes this value back so the client can measure round-trip latency. |
 
