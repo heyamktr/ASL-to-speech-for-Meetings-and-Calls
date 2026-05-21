@@ -63,7 +63,7 @@ export class HandTracker {
     if (event.source !== window) return;
     if (event.data?.type === 'ASL_LANDMARKS') {
       this.onLandmarks(event.data.landmarks);
-      console.log(`[ASL MediaPipe] Hand detected — ${event.data.landmarks.length} values`);
+      console.log(`[ASL MediaPipe] Holistic detected — ${event.data.landmarks.length} values`);
     }
   }
 
