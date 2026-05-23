@@ -1,9 +1,17 @@
-// Message types and helpers for content ↔ background communication.
+import type { ExtensionMessage } from './types';
 
-export type Message =
-  | { type: "TOGGLE_RECOGNITION"; enabled: boolean }
-  | { type: "PREDICTED_WORD"; word: string };
+export function sendToActiveTab(message: ExtensionMessage): void {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tabId = tabs[0]?.id;
+    if (tabId == null) return;
+    chrome.tabs.sendMessage(tabId, message);
+  });
+}
 
-export function sendMessage(msg: Message): Promise<unknown> {
-  return chrome.runtime.sendMessage(msg);
+export function onMessage(
+  handler: (message: ExtensionMessage) => void
+): void {
+  chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
+    handler(message);
+  });
 }

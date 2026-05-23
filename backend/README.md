@@ -34,7 +34,8 @@ docker-compose up --build
 Server is then available at `http://localhost:8000`.
 
 - Health check: `GET /health`
-- WebSocket inference endpoint: `ws://localhost:8000/ws/predict`
+- WebSocket inference endpoint: `ws://localhost:8000/ws`
+- Shared WebSocket contract: `../docs/websocket-contract.md`
 
 ## Deploying the trained model
 
