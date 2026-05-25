@@ -1,11 +1,12 @@
 import json
 from redis import asyncio as aioredis
 
-REDIS_URL = "redis://localhost:6379"
+from app.config import settings
+
 FRAME_WINDOW = 30
 SMOOTHING_K = 3 # same prediction must be made in K consecutive frames to be considered valid
 
-redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
 
 BUFFER_KEY = lambda sid: f"session:{sid}:frames"
 SMOOTHING_KEY = lambda sid: f"session:{sid}:smooth"
