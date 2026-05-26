@@ -16,7 +16,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from src.models.lstm import SignGRU
-from src.train import LandmarkDataset, temporal_crop, TTA_CROPS, SEQ_LEN
+from src.train import LandmarkDataset, temporal_crop, add_velocity, TTA_CROPS, SEQ_LEN
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 SPLITS_DIR = _REPO_ROOT / "data" / "splits"
@@ -47,6 +47,7 @@ def evaluate_split(
                 x_stored, len_batch, SEQ_LEN,
                 mode="uniform", crop_idx=crop_i, num_crops=num_crops,
             )
+            x_crop = add_velocity(x_crop)
             crop_logits.append(model(x_crop, lengths=crop_lens))
 
         logits = torch.stack(crop_logits).mean(0).cpu()
@@ -82,7 +83,7 @@ def evaluate_split(
     # Print worst classes first
     rows.sort(key=lambda r: r[1] / r[2])
     for gloss, c, tot in rows:
-        bar = "█" * c + "░" * (tot - c)
+        bar = "#" * c + "." * (tot - c)
         print(f"  {gloss:20s}  {c}/{tot}  {bar}")
 
 

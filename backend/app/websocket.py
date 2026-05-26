@@ -3,7 +3,7 @@
 import logging
 from time import perf_counter
 from typing import Any
-
+import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.session.buffer import add_frame, should_emit
@@ -64,9 +64,11 @@ async def _predict_loop(websocket: WebSocket) -> None:
 
         frames = await add_frame(session_id, landmarks)
         if frames is not None:
-            # Full 30-frame window ready — run inference (TODO: replace with SignClassifier)
-            prediction = DUMMY_PREDICTION
-            confidence = DUMMY_CONFIDENCE
+            classifier = websocket.app.state.classifier
+            prediction, confidence = classifier.predict(
+                np.asarray(frames, dtype=np.float32)
+            )
+
             if await should_emit(session_id, prediction):
                 response["prediction"] = prediction
                 response["confidence"] = confidence

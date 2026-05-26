@@ -3,7 +3,7 @@ from redis import asyncio as aioredis
 
 from app.config import settings
 
-FRAME_WINDOW = 30
+FRAME_WINDOW = 100
 SMOOTHING_K = 3 # same prediction must be made in K consecutive frames to be considered valid
 
 redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
