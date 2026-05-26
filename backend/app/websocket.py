@@ -6,13 +6,15 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.session.buffer import add_frame, should_emit
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 DUMMY_PREDICTION = "hello"
 DUMMY_CONFIDENCE = 0.99
-LANDMARK_COUNT = 258  # 33 pose landmarks (x,y,z,visibility) + 21 left hand (x,y,z) + 21 right hand (x,y,z)
-# = (33 × 4) + (21 × 3) + (21 × 3) = 132 + 63 + 63 = 258
+LANDMARK_COUNT = 144  # 21 right hand (x,y,z) + 21 left hand (x,y,z) + 6 pose joints (x,y,z)
+# = 63 + 63 + 18 = 144
 
 
 def _is_number(value: Any) -> bool:
@@ -28,7 +30,7 @@ def _validate_message(payload: Any) -> tuple[list[float], str, int | float]:
     timestamp = payload.get("timestamp")
 
     if not isinstance(landmarks, list) or len(landmarks) != LANDMARK_COUNT:
-        raise ValueError("landmarks must be a list of exactly 258 numbers")
+        raise ValueError("landmarks must be a list of exactly 144 numbers")
     if not all(_is_number(value) for value in landmarks):
         raise ValueError("landmarks must contain only numbers")
     if not isinstance(session_id, str) or not session_id.strip():
@@ -43,7 +45,7 @@ async def _predict_loop(websocket: WebSocket) -> None:
     await websocket.accept()
 
     while True:
-        start = perf_counter()
+        t0 = perf_counter()
 
         try:
             payload = await websocket.receive_json()
@@ -56,19 +58,32 @@ async def _predict_loop(websocket: WebSocket) -> None:
             await websocket.send_json({"error": str(exc)})
             continue
 
-        response = {
-            "prediction": DUMMY_PREDICTION,
-            "confidence": DUMMY_CONFIDENCE,
-            "timestamp": timestamp,
-        }
+        t1 = perf_counter()  # receive done
+
+        response: dict[str, Any] = {"timestamp": timestamp}
+
+        frames = await add_frame(session_id, landmarks)
+        if frames is not None:
+            # Full 30-frame window ready — run inference (TODO: replace with SignClassifier)
+            prediction = DUMMY_PREDICTION
+            confidence = DUMMY_CONFIDENCE
+            if await should_emit(session_id, prediction):
+                response["prediction"] = prediction
+                response["confidence"] = confidence
+
+        t2 = perf_counter()  # inference done
+
         await websocket.send_json(response)
 
-        latency_ms = (perf_counter() - start) * 1000
+        t3 = perf_counter()  # send done
+
         logger.info(
-            "prediction_sent session_id=%s frame_values=%d latency_ms=%.2f",
+            "latency session_id=%s recv_ms=%.2f infer_ms=%.2f send_ms=%.2f total_ms=%.2f",
             session_id,
-            len(landmarks),
-            latency_ms,
+            (t1 - t0) * 1000,
+            (t2 - t1) * 1000,
+            (t3 - t2) * 1000,
+            (t3 - t0) * 1000,
         )
 
 
