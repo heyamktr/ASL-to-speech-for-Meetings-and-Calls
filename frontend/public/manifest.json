@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Real-time ASL interpretation for Google Meet",
 
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "sidePanel"],
   "optional_permissions": ["camera"],
 
   "host_permissions": ["https://meet.google.com/*"],
@@ -22,8 +22,11 @@
   },
 
   "action": {
-    "default_popup": "popup/index.html",
     "default_title": "ASL Interpreter"
+  },
+
+  "side_panel": {
+    "default_path": "popup/index.html"
   },
 
   "web_accessible_resources": [

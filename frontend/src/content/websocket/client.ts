@@ -6,15 +6,24 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 export class WSClient {
   private sessionId: string;
   private onPrediction: (msg: PredictionMessage) => void;
+  private onConnect?: () => void;
+  private onDisconnect?: () => void;
   private wsUrl: string;
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private isConnecting = false;
   private pendingMessages: LandmarkMessage[] = [];
 
-  constructor(onPrediction: (msg: PredictionMessage) => void, wsUrl: string = 'ws://localhost:8000/ws') {
+  constructor(
+    onPrediction: (msg: PredictionMessage) => void,
+    wsUrl: string = 'ws://localhost:8000/ws',
+    onConnect?: () => void,
+    onDisconnect?: () => void,
+  ) {
     this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     this.onPrediction = onPrediction;
+    this.onConnect = onConnect;
+    this.onDisconnect = onDisconnect;
     this.wsUrl = wsUrl;
   }
 
@@ -28,6 +37,8 @@ export class WSClient {
       this.ws.onopen = () => {
         console.log('[ASL WS] Connected to backend at', this.wsUrl);
         this.reconnectAttempts = 0;
+        this.isConnecting = false;
+        this.onConnect?.();
         this.flushPendingMessages();
       };
 
@@ -55,6 +66,7 @@ export class WSClient {
         console.log('[ASL WS] Disconnected from backend');
         this.ws = null;
         this.isConnecting = false;
+        this.onDisconnect?.();
         this.attemptReconnect();
       };
     } catch (err) {
