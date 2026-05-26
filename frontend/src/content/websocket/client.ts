@@ -90,9 +90,9 @@ export class WSClient {
   }
 
   sendLandmarks(landmarks: number[]): void {
-    if (landmarks.length !== 258) {
+    if (landmarks.length !== 144) {
       console.warn(
-        `[ASL WS] Invalid landmark count: ${landmarks.length}, expected 258`
+        `[ASL WS] Invalid landmark count: ${landmarks.length}, expected 144`
       );
       return;
     }
