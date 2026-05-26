@@ -98,3 +98,22 @@
 97	son
 98	tell
 99	thursday
+
+## 2026-05-26 Dev A verification
+
+Checkpoint: `checkpoints/best.pt`
+
+Config:
+- raw live window: `(100, 144)`
+- model input after presence bits + velocity: `(100, 292)`
+- classes: 100
+
+Evaluation:
+- validation, 4-crop TTA: Top-1 169/238 = 71.01%, Top-3 84.87%, Top-5 86.55%
+- test, 4-crop TTA: Top-1 127/201 = 63.18%, Top-3 81.59%, Top-5 86.07%
+
+Export:
+- ONNX: `exports/asl_model.onnx`
+- label map: `exports/label_map.json`
+- metadata: `exports/export_meta.json`
+- backend local copy: `../backend/models/asl_model.onnx` and `../backend/models/label_map.json`
