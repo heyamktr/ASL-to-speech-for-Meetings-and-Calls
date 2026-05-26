@@ -12,6 +12,7 @@ interface TranscriptEntry {
   id: number;
   word: string;
   confidence: number;
+  timestamp: Date;
   demo?: boolean;
 }
 
@@ -35,14 +36,15 @@ export default function Popup() {
   const scrollRef  = useRef<HTMLDivElement>(null);
   const demoTimer  = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Auto-scroll transcript to bottom on new entry
+  // Demo timer cleanup
+  useEffect(() => () => { if (demoTimer.current) clearInterval(demoTimer.current); }, []);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [transcript]);
 
-  // Load initial state + listen for live updates
   useEffect(() => {
     Promise.all([getSettings(), getRuntimeState()]).then(([settings, state]) => {
       setEnabled(settings.enabled);
@@ -62,7 +64,7 @@ export default function Popup() {
         if (p) {
           setTranscript((prev) => [
             ...prev,
-            { id: entryId++, word: p.word, confidence: p.confidence },
+            { id: entryId++, word: p.word, confidence: p.confidence, timestamp: new Date() },
           ]);
         }
       }
@@ -71,9 +73,6 @@ export default function Popup() {
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
-
-  // Demo timer cleanup
-  useEffect(() => () => { if (demoTimer.current) clearInterval(demoTimer.current); }, []);
 
   async function toggle() {
     const next = !enabled;
@@ -94,7 +93,7 @@ export default function Popup() {
         const confidence = parseFloat((0.68 + Math.random() * 0.31).toFixed(2));
         setTranscript((prev) => [
           ...prev,
-          { id: entryId++, word, confidence, demo: true },
+          { id: entryId++, word, confidence, timestamp: new Date(), demo: true },
         ]);
         setLastPrediction({ word, confidence });
         setDetectionState("predicted");
@@ -108,24 +107,24 @@ export default function Popup() {
 
   if (loading) {
     return (
-      <div className="w-full h-screen bg-blue-600 flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full border-2 border-blue-300 border-t-white animate-spin" />
+      <div className="w-full h-screen bg-violet-100 flex items-center justify-center">
+        <div className="w-6 h-6 rounded-full border-2 border-violet-300 border-t-violet-600 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="w-full h-screen bg-blue-50 font-sans flex flex-col overflow-hidden">
+    <div className="w-full h-screen bg-violet-50 font-sans flex flex-col overflow-hidden">
 
       {/* ── Header ─────────────────────────────────── */}
-      <div className="bg-blue-600 px-5 pt-6 pb-5 flex-shrink-0">
+      <div className="bg-violet-200 px-5 pt-6 pb-5 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-blue-500 border-2 border-blue-400 flex items-center justify-center shadow-lg">
+          <div className="w-10 h-10 rounded-2xl bg-white border-2 border-violet-300 flex items-center justify-center shadow-sm">
             <span className="text-xl leading-none">🤟</span>
           </div>
           <div>
-            <h1 className="text-base font-bold text-white leading-tight tracking-wide">ASL Interpreter</h1>
-            <p className="text-xs text-blue-200">Sign language → voice</p>
+            <h1 className="text-base font-bold text-violet-900 leading-tight tracking-wide">ASL Interpreter</h1>
+            <p className="text-xs text-violet-600">Sign language → voice</p>
           </div>
         </div>
       </div>
@@ -136,10 +135,10 @@ export default function Popup() {
         {/* Toggle */}
         <button
           onClick={toggle}
-          className={`w-full py-3 rounded-2xl text-sm font-bold tracking-wide transition-all duration-150 active:scale-95 shadow-md ${
+          className={`w-full py-3 rounded-2xl text-sm font-bold tracking-wide transition-all duration-150 active:scale-95 shadow-sm ${
             enabled
-              ? "bg-blue-600 text-white shadow-blue-300 hover:bg-blue-700"
-              : "bg-white text-blue-600 border-2 border-blue-400 hover:bg-blue-50 shadow-blue-100"
+              ? "bg-violet-500 text-white hover:bg-violet-600"
+              : "bg-white text-violet-700 border-2 border-violet-300 hover:bg-violet-50"
           }`}
         >
           {enabled ? "■  Disable" : "▶  Enable"}
@@ -147,24 +146,22 @@ export default function Popup() {
 
         {/* Status row */}
         <div className="flex items-center gap-2">
-          {/* Backend */}
-          <div className="flex-1 flex items-center justify-between bg-white rounded-xl px-3 py-2 border border-blue-200 shadow-sm">
-            <span className="text-xs text-blue-500 font-semibold">Backend</span>
+          <div className="flex-1 flex items-center justify-between bg-white rounded-xl px-3 py-2 border border-violet-200 shadow-sm">
+            <span className="text-xs text-violet-500 font-semibold">Backend</span>
             <div className="flex items-center gap-1.5">
-              <span className={`w-2.5 h-2.5 rounded-full ${wsConnected ? "bg-green-500 shadow-sm shadow-green-300" : "bg-blue-300"}`} />
-              <span className={`text-xs font-semibold ${wsConnected ? "text-green-600" : "text-blue-400"}`}>
+              <span className={`w-2.5 h-2.5 rounded-full ${wsConnected ? "bg-green-400" : "bg-violet-200"}`} />
+              <span className={`text-xs font-semibold ${wsConnected ? "text-green-600" : "text-violet-400"}`}>
                 {wsConnected ? "connected" : "offline"}
               </span>
             </div>
           </div>
-          {/* Detection */}
-          <div className="flex-1 flex items-center justify-between bg-white rounded-xl px-3 py-2 border border-blue-200 shadow-sm">
-            <span className="text-xs text-blue-500 font-semibold">Camera</span>
+          <div className="flex-1 flex items-center justify-between bg-white rounded-xl px-3 py-2 border border-violet-200 shadow-sm">
+            <span className="text-xs text-violet-500 font-semibold">Camera</span>
             <span className={`text-xs font-semibold ${
-              detectionState === "no_hand" ? "text-amber-500"
-              : detectionState === "thinking" ? "text-blue-500"
+              detectionState === "no_hand"  ? "text-amber-500"
+              : detectionState === "thinking"  ? "text-violet-500"
               : detectionState === "predicted" ? "text-green-600"
-              : "text-blue-300"
+              : "text-violet-400"
             }`}>
               {detectionState === "idle"      ? "idle"
                : detectionState === "no_hand"  ? "no hand"
@@ -177,20 +174,19 @@ export default function Popup() {
 
       {/* ── Current prediction card ─────────────────── */}
       <div className="px-4 pb-3 flex-shrink-0">
-        <div className="bg-blue-600 rounded-2xl px-5 py-4 shadow-lg shadow-blue-200 min-h-20 flex items-center justify-center">
+        <div className="bg-violet-100 rounded-2xl px-5 py-4 border border-violet-200 min-h-20 flex items-center justify-center">
           <DetectionDisplay enabled={enabled} state={detectionState} prediction={lastPrediction} />
         </div>
       </div>
 
       {/* ── Transcript ─────────────────────────────── */}
       <div className="flex-1 flex flex-col px-4 pb-4 min-h-0">
-        {/* Transcript header */}
         <div className="flex items-center justify-between mb-2 flex-shrink-0">
-          <span className="text-xs font-bold text-blue-700 uppercase tracking-widest">Transcript</span>
+          <span className="text-xs font-bold text-violet-600 uppercase tracking-widest">Transcript</span>
           <div className="flex items-center gap-2">
             <button
               onClick={clearTranscript}
-              className="text-xs text-blue-400 hover:text-blue-600 font-medium transition-colors"
+              className="text-xs text-violet-400 hover:text-violet-700 font-medium transition-colors"
             >
               Clear
             </button>
@@ -198,8 +194,8 @@ export default function Popup() {
               onClick={toggleDemo}
               className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${
                 demoActive
-                  ? "bg-amber-400 text-white hover:bg-amber-500"
-                  : "bg-blue-200 text-blue-700 hover:bg-blue-300"
+                  ? "bg-amber-300 text-amber-900 hover:bg-amber-400"
+                  : "bg-violet-200 text-violet-700 hover:bg-violet-300"
               }`}
             >
               {demoActive ? "⏹ Stop Demo" : "▶ Demo"}
@@ -207,7 +203,6 @@ export default function Popup() {
           </div>
         </div>
 
-        {/* Scrollable list */}
         <div
           ref={scrollRef}
           className="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5"
@@ -216,7 +211,7 @@ export default function Popup() {
           {transcript.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
               <span className="text-3xl mb-2 opacity-20">📝</span>
-              <p className="text-xs text-blue-300">No words yet.<br />Interpreted signs will appear here.</p>
+              <p className="text-xs text-violet-400">No words yet.<br />Interpreted signs will appear here.</p>
             </div>
           ) : (
             transcript.map((entry, i) => (
@@ -228,7 +223,7 @@ export default function Popup() {
 
       {/* ── Footer ─────────────────────────────────── */}
       <div className="px-4 pb-4 flex-shrink-0">
-        <p className="text-center text-xs text-blue-400 leading-relaxed">
+        <p className="text-center text-xs text-violet-400 leading-relaxed">
           Camera is used locally only. No video is sent to any server.
         </p>
       </div>
@@ -236,23 +231,20 @@ export default function Popup() {
   );
 }
 
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 function TranscriptRow({ entry, index }: { entry: TranscriptEntry; index: number }) {
   const pct = Math.round(entry.confidence * 100);
-  const barColor = pct >= 85 ? "bg-green-400" : pct >= 65 ? "bg-blue-400" : "bg-amber-400";
+  const pctColor = pct >= 85 ? "text-green-600" : pct >= 65 ? "text-violet-600" : "text-amber-500";
 
   return (
-    <div className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-blue-100 shadow-sm">
-      <span className="text-xs text-blue-300 w-5 text-right flex-shrink-0 font-mono">{index + 1}</span>
-      <span className="flex-1 text-sm font-semibold text-blue-800 capitalize">{entry.word}</span>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <div className="w-12 h-1.5 rounded-full bg-blue-100 overflow-hidden">
-          <div className={`h-full rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${pct}%` }} />
-        </div>
-        <span className="text-xs text-blue-400 font-medium w-8 text-right">{pct}%</span>
-      </div>
-      {entry.demo && (
-        <span className="text-xs text-amber-400 font-bold flex-shrink-0">DEMO</span>
-      )}
+    <div className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-violet-100 shadow-sm">
+      <span className="text-xs text-violet-300 w-5 text-right flex-shrink-0 font-mono">{index + 1}</span>
+      <span className="flex-1 text-sm font-semibold text-violet-800 capitalize">{entry.word}</span>
+      <span className="text-xs text-violet-400 font-mono flex-shrink-0">{formatTime(entry.timestamp)}</span>
+      <span className={`text-xs font-bold flex-shrink-0 w-8 text-right ${pctColor}`}>{pct}%</span>
     </div>
   );
 }
@@ -269,8 +261,8 @@ function DetectionDisplay({
   if (!enabled || state === "idle") {
     return (
       <div className="text-center">
-        <div className="text-2xl mb-1.5 opacity-40">🤟</div>
-        <p className="text-xs text-blue-200 leading-relaxed">Enable and open Google Meet<br />to start capturing.</p>
+        <div className="text-2xl mb-1.5 opacity-30">🤟</div>
+        <p className="text-xs text-violet-500 leading-relaxed">Enable and open Google Meet<br />to start capturing.</p>
       </div>
     );
   }
@@ -279,8 +271,8 @@ function DetectionDisplay({
     return (
       <div className="text-center">
         <div className="text-2xl mb-1.5">✋</div>
-        <p className="text-sm font-semibold text-white">No hand detected</p>
-        <p className="text-xs text-blue-200 mt-0.5">Show your hand to the camera</p>
+        <p className="text-sm font-semibold text-violet-800">No hand detected</p>
+        <p className="text-xs text-violet-500 mt-0.5">Show your hand to the camera</p>
       </div>
     );
   }
@@ -290,10 +282,10 @@ function DetectionDisplay({
       <div className="text-center">
         <div className="flex gap-1.5 justify-center mb-2">
           {[0, 150, 300].map((delay) => (
-            <span key={delay} className="w-2 h-2 rounded-full bg-blue-300 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+            <span key={delay} className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
           ))}
         </div>
-        <p className="text-sm font-semibold text-white">Thinking…</p>
+        <p className="text-sm font-semibold text-violet-700">Thinking…</p>
       </div>
     );
   }
@@ -301,16 +293,8 @@ function DetectionDisplay({
   if (state === "predicted" && prediction) {
     return (
       <div className="text-center">
-        <p className="text-2xl font-bold text-white tracking-wide mb-1.5 capitalize">{prediction.word}</p>
-        <div className="flex items-center justify-center gap-2">
-          <div className="h-2 rounded-full bg-blue-500 w-20 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-white transition-all duration-300"
-              style={{ width: `${Math.round(prediction.confidence * 100)}%` }}
-            />
-          </div>
-          <span className="text-xs text-blue-200 font-semibold">{Math.round(prediction.confidence * 100)}%</span>
-        </div>
+        <p className="text-2xl font-bold text-violet-900 tracking-wide mb-1 capitalize">{prediction.word}</p>
+        <span className="text-xs font-semibold text-violet-500">{Math.round(prediction.confidence * 100)}% confidence</span>
       </div>
     );
   }
