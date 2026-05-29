@@ -107,7 +107,8 @@ def _softmax(logits: np.ndarray) -> np.ndarray:
     exp = np.exp(logits)
     return exp / np.sum(exp, axis=-1, keepdims=True)
 
-
+#I wired this class into the FastAPI app in main.py, where it's initialized on startup 
+#and used for predictions in the websocket endpoint nè chị Uyên
 class SignClassifier:
     def __init__(
         self,
@@ -122,11 +123,11 @@ class SignClassifier:
         self.confidence_threshold = confidence_threshold
 
         if not self.model_path.exists():
-            raise FileNotFoundError(f"ONNX model not found: {self.model_path}")
+            raise FileNotFoundError(f"ONNX model not found: {self.model_path}") 
 
         self.session = ort.InferenceSession(
             str(self.model_path),
-            providers=["CPUExecutionProvider"],
+            providers=["CPUExecutionProvider"], 
         )
         self.input_names = [item.name for item in self.session.get_inputs()]
         self.output_name = self.session.get_outputs()[0].name
