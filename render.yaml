@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: asl-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    healthCheckPath: /ready
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: asl-redis
+          property: connectionString
+      - key: MODEL_PATH
+        value: /app/models/asl_model.onnx
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MAX_CONNECTIONS
+        value: "50"
+      - key: INFERENCE_STRIDE
+        value: "5"
+
+  - type: redis
+    name: asl-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
