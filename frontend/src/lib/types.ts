@@ -19,10 +19,12 @@ export interface LandmarkMessage {
   timestamp: number;     // Date.now() — echoed back for RTT measurement
 }
 
-// Incoming: backend → content script
+// Incoming: backend → content script.
+// prediction/confidence are present only on the frame where a sign is emitted;
+// every other frame carries just the echoed timestamp.
 export interface PredictionMessage {
-  prediction: string;
-  confidence: number;    // 0.0–1.0
+  prediction?: string;
+  confidence?: number;   // 0.0–1.0
   timestamp: number;     // echoed from the request
 }
 
@@ -30,4 +32,5 @@ export interface PredictionMessage {
 export type ExtensionMessage =
   | { type: 'TOGGLE'; enabled: boolean }
   | { type: 'STATUS_REQUEST' }
-  | { type: 'STATUS_RESPONSE'; enabled: boolean; wsConnected: boolean };
+  | { type: 'STATUS_RESPONSE'; enabled: boolean; wsConnected: boolean }
+  | { type: 'CLEAR_SENTENCE' };

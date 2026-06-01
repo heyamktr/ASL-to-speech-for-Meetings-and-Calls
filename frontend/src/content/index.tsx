@@ -2,8 +2,9 @@ import { HandTracker } from "./mediapipe";
 import { WSClient } from "./websocket/client";
 import { onMessage } from "../lib/messaging";
 import type { PredictionMessage } from "../lib/types";
-import { getSettings, setRuntimeState } from "../lib/storage";
+import { getSettings, setSettings, setRuntimeState } from "../lib/storage";
 import type { DetectionState } from "../lib/storage";
+import { mountOverlay, unmountOverlay, addWordToOverlay, clearOverlay } from "./overlay/mount";
 
 let tracker: HandTracker | null = null;
 let wsClient: WSClient | null = null;
@@ -25,13 +26,20 @@ function updateDetectionState(next: DetectionState, extra?: { word: string; conf
 }
 
 function onPrediction(msg: PredictionMessage): void {
-  updateDetectionState('predicted', { word: msg.prediction, confidence: msg.confidence });
+  // Most frames carry only a timestamp; the backend includes a prediction just
+  // once per sign. Ignore empty frames and the low-confidence "uncertain"
+  // fallback — let the hand tracker own the idle/thinking/no_hand state.
+  if (!msg.prediction || msg.prediction === "uncertain") return;
+  updateDetectionState('predicted', { word: msg.prediction, confidence: msg.confidence ?? 0 });
+  addWordToOverlay(msg.prediction);
 }
 
 async function start(): Promise<void> {
   if (isRunning) return;
   isRunning = true;
   console.log("[ASL] Starting...");
+
+  mountOverlay(closeFromOverlay);
 
   const settings = await getSettings();
   const wsUrl = settings.backendUrl || "ws://localhost:8000/ws";
@@ -72,10 +80,18 @@ function stop(): void {
   console.log("[ASL] Stopping...");
   tracker?.stop();
   wsClient?.disconnect();
+  unmountOverlay();
   tracker = null;
   wsClient = null;
   updateDetectionState('idle');
   setRuntimeState({ wsConnected: false });
+}
+
+// The overlay's ✕ closes the whole feature: persist enabled=false (so the popup
+// toggle reflects it) and tear everything down.
+function closeFromOverlay(): void {
+  setSettings({ enabled: false });
+  stop();
 }
 
 onMessage((message) => {
@@ -85,6 +101,8 @@ onMessage((message) => {
     } else {
       stop();
     }
+  } else if (message.type === "CLEAR_SENTENCE") {
+    clearOverlay();
   }
 });
 

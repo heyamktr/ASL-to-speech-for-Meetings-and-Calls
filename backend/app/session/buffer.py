@@ -47,14 +47,20 @@ async def should_emit(session_id: str, prediction: str) -> bool:
     key = SMOOTHING_KEY(session_id)
 
     raw = await redis_client.get(key)
-    state = json.loads(raw) if raw else {"last": None, "count": 0}
+    state = json.loads(raw) if raw else {"last": None, "count": 0, "emitted": False}
 
     if prediction == state["last"]:
         state["count"] += 1
     else:
         state["last"] = prediction
         state["count"] = 1
+        state["emitted"] = False
+
+    emit = False
+    if state["count"] >= SMOOTHING_K and not state.get("emitted", False):
+        state["emitted"] = True
+        emit = True
 
     await redis_client.set(key, json.dumps(state), ex=SESSION_TTL)
 
-    return state["count"] >= SMOOTHING_K
+    return emit

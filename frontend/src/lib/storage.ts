@@ -1,6 +1,11 @@
+export type Theme = 'light' | 'dark' | 'high-contrast';
+export type FontSize = number;
+
 export interface StoredSettings {
   enabled: boolean;
   backendUrl?: string;
+  theme: Theme;
+  fontSize: FontSize;
 }
 
 export type DetectionState = 'idle' | 'no_hand' | 'thinking' | 'predicted';
@@ -14,6 +19,8 @@ export interface RuntimeState {
 const SETTINGS_DEFAULTS: StoredSettings = {
   enabled: false,
   backendUrl: 'ws://localhost:8000/ws',
+  theme: 'dark',
+  fontSize: 20,
 };
 
 const STATE_DEFAULTS: RuntimeState = {
