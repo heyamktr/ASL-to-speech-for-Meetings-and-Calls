@@ -12,6 +12,8 @@ class Settings:
     model_seq_len: int = int(os.getenv("MODEL_SEQ_LEN", "100"))
     confidence_threshold: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.4"))
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    max_connections: int = int(os.getenv("MAX_CONNECTIONS", "100"))
+    inference_stride: int = int(os.getenv("INFERENCE_STRIDE", "5"))
 
 
 settings = Settings()

@@ -12,6 +12,5 @@ venv/
 # Env
 .env
 
-# Model weights (large binaries)
-models/*.onnx
+# Model weights (large binaries — .pt checkpoints stay local, .onnx is committed for deployment)
 models/*.pt
