@@ -69,7 +69,9 @@ async def _predict_loop(websocket: WebSocket) -> None:
                 np.asarray(frames, dtype=np.float32)
             )
 
-            if await should_emit(session_id, prediction):
+            # Always run the smoothing gate so its run-tracking stays correct,
+            # but never surface "uncertain" (the low-confidence fallback) as a caption.
+            if await should_emit(session_id, prediction) and prediction != "uncertain":
                 response["prediction"] = prediction
                 response["confidence"] = confidence
 
