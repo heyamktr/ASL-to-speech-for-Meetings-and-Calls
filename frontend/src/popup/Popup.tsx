@@ -254,10 +254,28 @@ export default function Popup() {
 
       {/* ── Header: extension name + theme circles ───────────── */}
       <div className="px-6 pt-6 pb-4 flex-shrink-0" style={{ background: 'var(--ph)' }}>
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="font-serif-body leading-tight" style={{ color: 'var(--pa)', fontSize: '28px', fontWeight: 700 }}>
+        <div className="flex items-center gap-3 min-w-0">
+          <img
+            src="../icons/glyph-128.png"
+            alt=""
+            width={52}
+            height={52}
+            className="flex-shrink-0"
+            style={{ display: 'block' }}
+          />
+          <h1 className="font-serif-body leading-tight" style={{ color: 'var(--pa)', fontSize: '26px', fontWeight: 700, whiteSpace: 'nowrap' }}>
             ASL Interpreter
           </h1>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <button
+            onClick={() => setPrivacyOpen((v) => !v)}
+            className="text-sm underline-offset-2 hover:underline"
+            style={{ color: 'var(--pm)' }}
+          >
+            Privacy &amp; data policy
+          </button>
 
           {/* Theme toggle — two circles, sun (light) / moon (dark) */}
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -266,7 +284,7 @@ export default function Popup() {
               aria-pressed={theme === 'light'}
               aria-label="Light theme"
               title="Light"
-              className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
               style={theme === 'light'
                 ? { background: 'var(--pbtn)', color: 'var(--pbtnt)' }
                 : { background: 'var(--ps)', color: 'var(--pm)', border: '1px solid var(--pbo)' }
@@ -279,7 +297,7 @@ export default function Popup() {
               aria-pressed={theme === 'dark'}
               aria-label="Dark theme"
               title="Dark"
-              className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
               style={theme === 'dark'
                 ? { background: 'var(--pbtn)', color: 'var(--pbtnt)' }
                 : { background: 'var(--ps)', color: 'var(--pm)', border: '1px solid var(--pbo)' }
@@ -289,14 +307,6 @@ export default function Popup() {
             </button>
           </div>
         </div>
-
-        <button
-          onClick={() => setPrivacyOpen((v) => !v)}
-          className="mt-1 text-sm underline-offset-2 hover:underline"
-          style={{ color: 'var(--pm)' }}
-        >
-          Privacy &amp; data policy
-        </button>
 
         {/* Privacy panel */}
         {privacyOpen && (
