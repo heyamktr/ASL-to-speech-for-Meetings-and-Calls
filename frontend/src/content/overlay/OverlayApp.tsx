@@ -33,6 +33,14 @@ const DEFAULT_H = 420;
 const MIN_FONT = 8;
 const MAX_FONT = 32;
 const DEFAULT_FONT = 20;
+const MIN_PEER_H = 70;       // min height of the participants transcript
+const MIN_ASL_H = 90;        // keep at least this much for the ASL area
+const DEFAULT_PEER_H = 150;
+
+// Older builds may have stored the removed 'high-contrast' theme — fold it to dark.
+function coerceTheme(t: unknown): Theme {
+  return t === 'light' ? 'light' : 'dark';
+}
 
 // Coerce a stored value (which may be a string or null from older builds) into a
 // valid clamped font size — guards against the "NaNpt" corruption.
@@ -63,6 +71,7 @@ export function OverlayApp({ onReady, onClose }: Props) {
   const [fontSize, setFontSize] = useState(DEFAULT_FONT);
   const [pos, setPos] = useState({ x: 20, y: 20 });
   const [size, setSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
+  const [peerH, setPeerH] = useState(DEFAULT_PEER_H);
   const [pastBlocks, setPastBlocks] = useState<SentenceBlock[]>([]);
   const [currentWords, setCurrentWords] = useState<string[]>([]);
   const [peerEntries, setPeerEntries] = useState<PeerEntry[]>([]);
@@ -74,20 +83,23 @@ export function OverlayApp({ onReady, onClose }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, ox: 0, oy: 0 });
   const resizeRef = useRef({ active: false, startX: 0, startY: 0, startW: 0, startH: 0 });
+  const peerResizeRef = useRef({ active: false, startY: 0, startH: 0 });
   const posRef = useRef(pos);
   const sizeRef = useRef(size);
+  const peerHRef = useRef(peerH);
   const aslScrollRef = useRef<HTMLDivElement>(null);
   const peerScrollRef = useRef<HTMLDivElement>(null);
 
   posRef.current = pos;
   sizeRef.current = size;
+  peerHRef.current = peerH;
 
   // Load settings
   useEffect(() => {
     chrome.storage.sync.get(
-      { theme: 'dark', fontSize: DEFAULT_FONT, overlayX: 20, overlayY: 20, overlayW: DEFAULT_W, overlayH: DEFAULT_H },
+      { theme: 'dark', fontSize: DEFAULT_FONT, overlayX: 20, overlayY: 20, overlayW: DEFAULT_W, overlayH: DEFAULT_H, overlayPeerH: DEFAULT_PEER_H },
       (r) => {
-        setTheme(r.theme as Theme);
+        setTheme(coerceTheme(r.theme));
 
         // Every enable starts a fresh session at the default size — the previous
         // session's A−/A+ adjustments are intentionally not carried over.
@@ -103,6 +115,10 @@ export function OverlayApp({ onReady, onClose }: Props) {
         setSize({ w, h });
         setPos({ x, y });
 
+        // Participants transcript height — clamp so it can't crowd out the ASL area.
+        const ph = Math.max(MIN_PEER_H, Math.min(h - MIN_ASL_H, toNum(r.overlayPeerH, DEFAULT_PEER_H)));
+        setPeerH(ph);
+
         // Heal any previously-corrupted (string/NaN/off-screen) stored geometry.
         if (w !== r.overlayW || h !== r.overlayH || x !== r.overlayX || y !== r.overlayY) {
           chrome.storage.sync.set({ overlayW: w, overlayH: h, overlayX: x, overlayY: y });
@@ -111,7 +127,7 @@ export function OverlayApp({ onReady, onClose }: Props) {
     );
 
     const handler = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (changes.theme)    setTheme(changes.theme.newValue as Theme);
+      if (changes.theme)    setTheme(coerceTheme(changes.theme.newValue));
       if (changes.fontSize) setFontSize(toFontSize(changes.fontSize.newValue));
     };
     chrome.storage.sync.onChanged.addListener(handler);
@@ -181,13 +197,23 @@ export function OverlayApp({ onReady, onClose }: Props) {
       const results: SpeechRecognitionResultList = event.results;
       let interimText = '';
 
+      // A single line per utterance: it shows italic while interim, then the SAME
+      // line (same id, same position) switches to normal once finalized — no
+      // duplicate "hearing" + "confirmed" pair.
       for (let i = event.resultIndex; i < results.length; i++) {
         const result = results[i];
         const text = result[0].transcript.trim();
+        if (!text) continue;
         if (result.isFinal) {
+          const finalText = text;
+          const activeId = interimId;
           setPeerEntries((prev) => {
-            const next = prev.filter((e) => !e.isFinal || e.id !== interimId);
-            return [...next, { id: _peerId++, text, timestamp: new Date(), isFinal: true }].slice(-20);
+            if (activeId !== null && prev.some((e) => e.id === activeId)) {
+              return prev
+                .map((e) => (e.id === activeId ? { ...e, text: finalText, isFinal: true, timestamp: new Date() } : e))
+                .slice(-20);
+            }
+            return [...prev, { id: _peerId++, text: finalText, timestamp: new Date(), isFinal: true }].slice(-20);
           });
           interimId = null;
         } else {
@@ -195,12 +221,14 @@ export function OverlayApp({ onReady, onClose }: Props) {
         }
       }
 
-      if (interimText) {
-        const id = interimId ?? _peerId++;
-        interimId = id;
+      if (interimText.trim()) {
+        const id = interimId ?? (interimId = _peerId++);
+        const text = interimText.trim();
         setPeerEntries((prev) => {
-          const next = prev.filter((e) => e.isFinal || e.id !== id);
-          return [...next, { id, text: interimText.trim(), timestamp: new Date(), isFinal: false }].slice(-20);
+          if (prev.some((e) => e.id === id)) {
+            return prev.map((e) => (e.id === id ? { ...e, text, timestamp: new Date() } : e));
+          }
+          return [...prev, { id, text, timestamp: new Date(), isFinal: false }].slice(-20);
         });
       }
     };
@@ -294,6 +322,35 @@ export function OverlayApp({ onReady, onClose }: Props) {
     chrome.storage.sync.set({ overlayW: w, overlayH: h });
   }, []);
 
+  // ── Divider drag — resize the participants transcript vs. the ASL area ─────
+
+  const peerMax = () => Math.max(MIN_PEER_H, sizeRef.current.h - MIN_ASL_H);
+
+  const onDividerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    peerResizeRef.current = { active: true, startY: e.clientY, startH: peerHRef.current };
+  }, []);
+
+  const onDividerPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!peerResizeRef.current.active) return;
+    // Dragging up grows the participants area, dragging down shrinks it.
+    const delta = peerResizeRef.current.startY - e.clientY;
+    const h = Math.max(MIN_PEER_H, Math.min(peerMax(), peerResizeRef.current.startH + delta));
+    if (peerScrollRef.current) peerScrollRef.current.style.height = `${h}px`;
+    peerHRef.current = h;
+  }, []);
+
+  const onDividerPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!peerResizeRef.current.active) return;
+    peerResizeRef.current.active = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    const h = peerHRef.current;
+    setPeerH(h);
+    chrome.storage.sync.set({ overlayPeerH: h });
+  }, []);
+
   function adjustFontSize(delta: number) {
     setFontSize((prev) => {
       const next = toFontSize(toFontSize(prev) + delta);
@@ -303,6 +360,8 @@ export function OverlayApp({ onReady, onClose }: Props) {
   }
 
   const currentSentence = currentWords.join(' ');
+  // Clamp the stored peer height against the live panel height each render.
+  const clampedPeerH = Math.max(MIN_PEER_H, Math.min(size.h - MIN_ASL_H, peerH));
 
   return (
     <div
@@ -318,7 +377,7 @@ export function OverlayApp({ onReady, onClose }: Props) {
         onPointerMove={onDragPointerMove}
         onPointerUp={onDragPointerUp}
       >
-        <span className="header-title">🤟 ASL Captions</span>
+        <span className="header-title">ASL Captions</span>
         <div className="header-actions" onPointerDown={(e) => e.stopPropagation()}>
           <button className="icon-btn" onClick={() => adjustFontSize(-1)} title="Decrease text size">A−</button>
           <span className="font-size-label">{fontSize}pt</span>
@@ -348,11 +407,19 @@ export function OverlayApp({ onReady, onClose }: Props) {
         </div>
       </div>
 
-      {/* ── Divider ──────────────────────────────────── */}
-      <div className="section-divider" />
+      {/* ── Divider — drag to resize the participants transcript ──────── */}
+      <div
+        className="section-divider"
+        onPointerDown={onDividerPointerDown}
+        onPointerMove={onDividerPointerMove}
+        onPointerUp={onDividerPointerUp}
+        title="Drag to resize participants transcript"
+      >
+        <span className="divider-grip" />
+      </div>
 
       {/* ── Peer transcript ──────────────────────────── */}
-      <div className="peer-section" ref={peerScrollRef}>
+      <div className="peer-section" ref={peerScrollRef} style={{ height: clampedPeerH }}>
         <div className="peer-header">
           <span className="peer-header-label">
             {speechActive && <span className="peer-dot" />}

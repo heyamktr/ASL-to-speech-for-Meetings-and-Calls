@@ -26,12 +26,22 @@ function updateDetectionState(next: DetectionState, extra?: { word: string; conf
 }
 
 function onPrediction(msg: PredictionMessage): void {
-  // Most frames carry only a timestamp; the backend includes a prediction just
-  // once per sign. Ignore empty frames and the low-confidence "uncertain"
-  // fallback — let the hand tracker own the idle/thinking/no_hand state.
   if (!msg.prediction || msg.prediction === "uncertain") return;
   updateDetectionState('predicted', { word: msg.prediction, confidence: msg.confidence ?? 0 });
   addWordToOverlay(msg.prediction);
+
+  // Speak the word — postMessage reaches inject.ts in the MAIN world
+  getSettings().then(({ voiceEnabled, ttsEndpoint, speechRate, speechPitch, voiceURI }) => {
+    if (!voiceEnabled) return;
+    window.postMessage({
+      type: 'ASL_SPEAK_WORD',
+      word: msg.prediction,
+      ttsEndpoint,
+      rate: speechRate,
+      pitch: speechPitch,
+      voiceURI,
+    }, '*');
+  });
 }
 
 async function start(): Promise<void> {
