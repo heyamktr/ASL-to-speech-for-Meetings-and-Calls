@@ -1,3 +1,6 @@
+# OS artifacts
+__MACOSX/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -24,3 +27,6 @@ checkpoints/*
 !checkpoints/.gitkeep
 exports/*
 !exports/.gitkeep
+
+# Generated evaluation output (re-run src.evaluate to reproduce)
+error_analysis.json
