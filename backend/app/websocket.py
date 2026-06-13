@@ -3,18 +3,18 @@
 import logging
 from time import perf_counter
 from typing import Any
+
 import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.config import settings
+from app.metrics import metrics
 from app.session.buffer import add_frame, should_emit
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-DUMMY_PREDICTION = "hello"
-DUMMY_CONFIDENCE = 0.99
-LANDMARK_COUNT = 144  # 21 right hand (x,y,z) + 21 left hand (x,y,z) + 6 pose joints (x,y,z)
-# = 63 + 63 + 18 = 144
+LANDMARK_COUNT = 144  # 63 right hand + 63 left hand + 18 pose
 
 
 def _is_number(value: Any) -> bool:
@@ -42,51 +42,62 @@ def _validate_message(payload: Any) -> tuple[list[float], str, int | float]:
 
 
 async def _predict_loop(websocket: WebSocket) -> None:
-    await websocket.accept()
+    if not await metrics.try_connect(settings.max_connections):
+        await websocket.close(code=1008, reason="Server at capacity")
+        return
 
-    while True:
-        t0 = perf_counter()
+    try:
+        await websocket.accept()
 
-        try:
-            payload = await websocket.receive_json()
-            landmarks, session_id, timestamp = _validate_message(payload)
-        except WebSocketDisconnect:
-            logger.info("WebSocket client disconnected")
-            break
-        except ValueError as exc:
-            logger.warning("Invalid WebSocket message: %s", exc)
-            await websocket.send_json({"error": str(exc)})
-            continue
+        while True:
+            t0 = perf_counter()
 
-        t1 = perf_counter()  # receive done
+            try:
+                payload = await websocket.receive_json()
+                landmarks, session_id, timestamp = _validate_message(payload)
+            except WebSocketDisconnect:
+                logger.info("WebSocket client disconnected")
+                break
+            except ValueError as exc:
+                logger.warning("Invalid WebSocket message: %s", exc)
+                await websocket.send_json({"error": str(exc)})
+                continue
 
-        response: dict[str, Any] = {"timestamp": timestamp}
+            t1 = perf_counter()
 
-        frames = await add_frame(session_id, landmarks)
-        if frames is not None:
-            classifier = websocket.app.state.classifier
-            prediction, confidence = classifier.predict(
-                np.asarray(frames, dtype=np.float32)
+            response: dict[str, Any] = {"timestamp": timestamp}
+            ran_inference = False
+
+            frames = await add_frame(session_id, landmarks)
+            if frames is not None:
+                classifier = websocket.app.state.classifier
+                prediction, confidence = classifier.predict(
+                    np.asarray(frames, dtype=np.float32)
+                )
+                ran_inference = True
+
+                if await should_emit(session_id, prediction):
+                    response["prediction"] = prediction
+                    response["confidence"] = confidence
+
+            t2 = perf_counter()
+
+            await websocket.send_json(response)
+
+            t3 = perf_counter()
+            total_ms = (t3 - t0) * 1000
+            await metrics.record(total_ms, ran_inference)
+
+            logger.info(
+                "latency session_id=%s recv_ms=%.2f infer_ms=%.2f send_ms=%.2f total_ms=%.2f",
+                session_id,
+                (t1 - t0) * 1000,
+                (t2 - t1) * 1000,
+                (t3 - t2) * 1000,
+                total_ms,
             )
-
-            if await should_emit(session_id, prediction):
-                response["prediction"] = prediction
-                response["confidence"] = confidence
-
-        t2 = perf_counter()  # inference done
-
-        await websocket.send_json(response)
-
-        t3 = perf_counter()  # send done
-
-        logger.info(
-            "latency session_id=%s recv_ms=%.2f infer_ms=%.2f send_ms=%.2f total_ms=%.2f",
-            session_id,
-            (t1 - t0) * 1000,
-            (t2 - t1) * 1000,
-            (t3 - t2) * 1000,
-            (t3 - t0) * 1000,
-        )
+    finally:
+        await metrics.disconnect()
 
 
 @router.websocket("/ws")

@@ -1,17 +1,23 @@
 {
   "manifest_version": 3,
   "name": "ASL Sign Interpreter",
-  "version": "0.1.0",
-  "description": "Real-time ASL interpretation for Google Meet",
+  "version": "0.2.0",
+  "description": "Real-time ASL interpretation for Google Meet and Zoom",
 
-  "permissions": ["storage", "activeTab"],
-  "optional_permissions": ["camera"],
+  "permissions": ["storage", "activeTab", "sidePanel"],
+  "optional_permissions": ["camera", "microphone"],
 
-  "host_permissions": ["https://meet.google.com/*"],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "https://zoom.us/*"
+  ],
 
   "content_scripts": [
     {
-      "matches": ["https://meet.google.com/*"],
+      "matches": [
+        "https://meet.google.com/*",
+        "https://zoom.us/*"
+      ],
       "js": ["content/index.js"],
       "run_at": "document_idle"
     }
@@ -22,14 +28,20 @@
   },
 
   "action": {
-    "default_popup": "popup/index.html",
     "default_title": "ASL Interpreter"
+  },
+
+  "side_panel": {
+    "default_path": "popup/index.html"
   },
 
   "web_accessible_resources": [
     {
       "resources": ["mediapipe/*", "injected/mediapipe-bridge.js"],
-      "matches": ["https://meet.google.com/*"]
+      "matches": [
+        "https://meet.google.com/*",
+        "https://zoom.us/*"
+      ]
     }
   ]
 }

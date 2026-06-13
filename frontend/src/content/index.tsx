@@ -2,15 +2,36 @@ import { HandTracker } from "./mediapipe";
 import { WSClient } from "./websocket/client";
 import { onMessage } from "../lib/messaging";
 import type { PredictionMessage } from "../lib/types";
-import { getSettings } from "../lib/storage";
+import { getSettings, setSettings, setRuntimeState } from "../lib/storage";
+import type { DetectionState } from "../lib/storage";
+import { mountOverlay, unmountOverlay, addWordToOverlay, clearOverlay } from "./overlay/mount";
 
 let tracker: HandTracker | null = null;
 let wsClient: WSClient | null = null;
 let isRunning = false;
+let localDetectionState: DetectionState = 'idle';
+
+function hasHands(landmarks: number[]): boolean {
+  // Indices 132-257 are left + right hand landmarks; all zeros means no hands detected
+  return landmarks.slice(132).some((v) => v !== 0);
+}
+
+function updateDetectionState(next: DetectionState, extra?: { word: string; confidence: number }): void {
+  if (localDetectionState === next && !extra) return;
+  localDetectionState = next;
+  const patch = extra
+    ? { detectionState: next, lastPrediction: extra }
+    : { detectionState: next };
+  setRuntimeState(patch);
+}
 
 function onPrediction(msg: PredictionMessage): void {
-  // Week 1: just log. Week 2: render in overlay.
-  console.log("[ASL] Got prediction:", msg);
+  // Most frames carry only a timestamp; the backend includes a prediction just
+  // once per sign. Ignore empty frames and the low-confidence "uncertain"
+  // fallback — let the hand tracker own the idle/thinking/no_hand state.
+  if (!msg.prediction || msg.prediction === "uncertain") return;
+  updateDetectionState('predicted', { word: msg.prediction, confidence: msg.confidence ?? 0 });
+  addWordToOverlay(msg.prediction);
 }
 
 async function start(): Promise<void> {
@@ -18,13 +39,25 @@ async function start(): Promise<void> {
   isRunning = true;
   console.log("[ASL] Starting...");
 
+  mountOverlay(closeFromOverlay);
+
   const settings = await getSettings();
   const wsUrl = settings.backendUrl || "ws://localhost:8000/ws";
 
-  wsClient = new WSClient(onPrediction, wsUrl);
+  wsClient = new WSClient(
+    onPrediction,
+    wsUrl,
+    () => setRuntimeState({ wsConnected: true }),
+    () => setRuntimeState({ wsConnected: false }),
+  );
   wsClient.connect();
 
   tracker = new HandTracker((landmarks) => {
+    if (hasHands(landmarks)) {
+      updateDetectionState('thinking');
+    } else {
+      updateDetectionState('no_hand');
+    }
     wsClient?.sendLandmarks(landmarks);
   });
 
@@ -36,6 +69,8 @@ async function start(): Promise<void> {
       "[ASL] If using Meet on Google domain, you may need to grant camera permission when prompted",
     );
     isRunning = false;
+    updateDetectionState('idle');
+    setRuntimeState({ wsConnected: false });
   }
 }
 
@@ -45,11 +80,20 @@ function stop(): void {
   console.log("[ASL] Stopping...");
   tracker?.stop();
   wsClient?.disconnect();
+  unmountOverlay();
   tracker = null;
   wsClient = null;
+  updateDetectionState('idle');
+  setRuntimeState({ wsConnected: false });
 }
 
-// Listen for toggle messages from the popup
+// The overlay's ✕ closes the whole feature: persist enabled=false (so the popup
+// toggle reflects it) and tear everything down.
+function closeFromOverlay(): void {
+  setSettings({ enabled: false });
+  stop();
+}
+
 onMessage((message) => {
   if (message.type === "TOGGLE") {
     if (message.enabled) {
@@ -57,10 +101,11 @@ onMessage((message) => {
     } else {
       stop();
     }
+  } else if (message.type === "CLEAR_SENTENCE") {
+    clearOverlay();
   }
 });
 
-// Restore state from last session on page load
 getSettings().then(({ enabled }) => {
   if (enabled) start();
 });
