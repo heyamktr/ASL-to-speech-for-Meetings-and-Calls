@@ -1,4 +1,4 @@
-export type Theme = 'light' | 'dark' | 'high-contrast';
+export type Theme = 'light' | 'dark';
 export type FontSize = number;
 
 export interface StoredSettings {
@@ -6,6 +6,11 @@ export interface StoredSettings {
   backendUrl?: string;
   theme: Theme;
   fontSize: FontSize;
+  voiceEnabled: boolean;
+  voiceURI: string;
+  speechRate: number;
+  speechPitch: number;
+  ttsEndpoint: string;
 }
 
 export type DetectionState = 'idle' | 'no_hand' | 'thinking' | 'predicted';
@@ -21,6 +26,11 @@ const SETTINGS_DEFAULTS: StoredSettings = {
   backendUrl: 'ws://localhost:8000/ws',
   theme: 'dark',
   fontSize: 20,
+  voiceEnabled: false,
+  voiceURI: '',
+  speechRate: 1.0,
+  speechPitch: 1.0,
+  ttsEndpoint: 'https://localhost:8001/tts',
 };
 
 const STATE_DEFAULTS: RuntimeState = {
