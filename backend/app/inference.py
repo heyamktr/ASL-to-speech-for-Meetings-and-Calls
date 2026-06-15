@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 
+from app.cache import PredictionCache
+
 RAW_FEATURE_DIM = 144
 MODEL_INPUT_DIM = 292
 
@@ -116,11 +118,13 @@ class SignClassifier:
         label_map_path: str,
         seq_len: int = 100,
         confidence_threshold: float = 0.4,
+        cache: PredictionCache | None = None,
     ) -> None:
         self.model_path = Path(model_path)
         self.label_map_path = Path(label_map_path)
         self.seq_len = seq_len
         self.confidence_threshold = confidence_threshold
+        self.cache = cache
 
         if not self.model_path.exists():
             raise FileNotFoundError(f"ONNX model not found: {self.model_path}") 
@@ -159,7 +163,18 @@ class SignClassifier:
         return self.session.run([self.output_name], inputs)[0]
 
     def predict(self, landmarks: np.ndarray) -> tuple[str, float]:
-        """Run inference on a raw (frames, 144) sliding window."""
+        """Run inference on a raw (frames, 144) sliding window.
+
+        If a cache is configured, a quantized fingerprint of the window is checked
+        first; on a hit the full ONNX inference (feature build + model run) is
+        skipped entirely.
+        """
+        cache_key = self.cache.fingerprint(landmarks) if self.cache else None
+        if cache_key is not None:
+            cached = self.cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         features, lengths = build_model_features(landmarks, self.seq_len)
         logits = self._run(features, lengths)
         probabilities = _softmax(logits)[0]
@@ -169,5 +184,10 @@ class SignClassifier:
         prediction = self.labels[class_id] if class_id < len(self.labels) else str(class_id)
 
         if confidence < self.confidence_threshold:
-            return "uncertain", confidence
-        return prediction, confidence
+            result = ("uncertain", confidence)
+        else:
+            result = (prediction, confidence)
+
+        if cache_key is not None:
+            self.cache.put(cache_key, result[0], result[1])
+        return result

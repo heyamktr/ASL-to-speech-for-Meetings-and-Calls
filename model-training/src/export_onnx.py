@@ -64,6 +64,7 @@ def main() -> None:
         model,
         (dummy_x, dummy_lengths),
         output_path,
+        dynamo=False,
         export_params=True,
         opset_version=args.opset,
         do_constant_folding=True,

@@ -27,7 +27,7 @@ from torch import nn
 from torch.optim.swa_utils import AveragedModel
 from torch.utils.data import DataLoader, Dataset
 
-from src.models.lstm import SignGRU
+from src.models import build_model
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -266,7 +266,7 @@ def evaluate(
 
 
 # ── Training loop ──────────────────────────────────────────────────────────────
-def train(resume: bool = True) -> None:
+def train(resume: bool = True, arch: str = "gru", ckpt_name: str = "best.pt") -> None:
     if torch.backends.mps.is_available():
         device = torch.device("mps")
     elif torch.cuda.is_available():
@@ -282,14 +282,15 @@ def train(resume: bool = True) -> None:
     print(f"Train: {len(train_ds)} samples | Val: {len(val_ds)} samples")
     print(f"Input dim: {INPUT_DIM}  SEQ_LEN: {SEQ_LEN}  STORED_LEN: {STORED_LEN}")
 
-    model = SignGRU(
+    model = build_model(
+        arch,
         input_size=INPUT_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
         dropout=DROPOUT,
         num_classes=NUM_CLASSES,
     ).to(device)
-    print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    print(f"Architecture: {arch}  |  Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     class_weights = compute_class_weights(train_ds).to(device)
     criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
@@ -315,12 +316,13 @@ def train(resume: bool = True) -> None:
     epochs_no_imp = 0
     start_epoch   = 1
 
-    ckpt_path = CKPT_DIR / "best.pt"
+    ckpt_path = CKPT_DIR / ckpt_name
     if resume and ckpt_path.exists():
         ckpt = torch.load(ckpt_path, map_location=device)
         cfg = ckpt.get("config", {})
         arch_match = (
-            cfg.get("input_size")   == INPUT_DIM
+            cfg.get("arch", "gru")  == arch
+            and cfg.get("input_size")   == INPUT_DIM
             and cfg.get("hidden_size") == HIDDEN_SIZE
             and cfg.get("num_classes") == NUM_CLASSES
         )
@@ -421,6 +423,7 @@ def train(resume: bool = True) -> None:
                 "val_acc":         val_acc,
                 "val_loss":        val_loss,
                 "config": {
+                    "arch":         arch,
                     "input_size":   INPUT_DIM,
                     "hidden_size":  HIDDEN_SIZE,
                     "num_layers":   NUM_LAYERS,
@@ -428,7 +431,7 @@ def train(resume: bool = True) -> None:
                     "num_classes":  NUM_CLASSES,
                 },
             }
-            torch.save(ckpt, CKPT_DIR / "best.pt")
+            torch.save(ckpt, ckpt_path)
             print(f"  saved best checkpoint  (val_loss={val_loss:.4f}  val_acc={val_acc:.3f})")
         else:
             epochs_no_imp += 1
@@ -454,6 +457,7 @@ def train(resume: bool = True) -> None:
                 "val_acc":     swa_val_acc,
                 "val_loss":    swa_val_loss,
                 "config": {
+                    "arch":        arch,
                     "input_size":  INPUT_DIM,
                     "hidden_size": HIDDEN_SIZE,
                     "num_layers":  NUM_LAYERS,
@@ -462,7 +466,7 @@ def train(resume: bool = True) -> None:
                 },
                 "is_swa": True,
             }
-            torch.save(ckpt, CKPT_DIR / "best.pt")
+            torch.save(ckpt, ckpt_path)
             best_val_loss = swa_val_loss
             best_val_acc  = max(best_val_acc, swa_val_acc)
             print(f"[SWA] saved averaged model as best.pt")
@@ -470,13 +474,18 @@ def train(resume: bool = True) -> None:
             print(f"[SWA] regular checkpoint was better; SWA discarded")
 
     print(f"\nTraining complete. Best val_loss={best_val_loss:.4f}  best val_acc={best_val_acc:.3f}")
-    print(f"Checkpoint: {CKPT_DIR / 'best.pt'}")
+    print(f"Checkpoint: {ckpt_path}")
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-resume", action="store_true",
-                        help="Start training from scratch instead of loading best.pt")
+                        help="Start training from scratch instead of loading the checkpoint")
+    parser.add_argument("--arch", default="gru", choices=["gru", "transformer"],
+                        help="Encoder architecture: 'gru' (production) or 'transformer' (Week 3 experiment)")
+    parser.add_argument("--ckpt-name", default=None,
+                        help="Checkpoint filename under checkpoints/ (default: best.pt for gru, best_transformer.pt for transformer)")
     args = parser.parse_args()
-    train(resume=not args.no_resume)
+    ckpt_name = args.ckpt_name or ("best.pt" if args.arch == "gru" else f"best_{args.arch}.pt")
+    train(resume=not args.no_resume, arch=args.arch, ckpt_name=ckpt_name)

@@ -1,0 +1,48 @@
+{
+  "model": {
+    "checkpoint": "D:\\Project\\ASL-to-speech-for-Meetings-and-Calls\\model-training\\checkpoints\\best.pt",
+    "onnx_path": "D:\\Project\\ASL-to-speech-for-Meetings-and-Calls\\model-training\\exports\\asl_model.onnx",
+    "parameters": 558309,
+    "onnx_size_kb": 2186.8,
+    "seq_len": 100,
+    "input_dim": 292,
+    "config": {
+      "input_size": 292,
+      "hidden_size": 128,
+      "num_layers": 2,
+      "dropout": 0.5,
+      "num_classes": 100
+    }
+  },
+  "benchmark_config": {
+    "warmup_runs": 20,
+    "timed_runs": 200,
+    "device": "cpu",
+    "torch_version": "2.12.0+cpu",
+    "onnxruntime_version": "1.26.0"
+  },
+  "pytorch": {
+    "mean_ms": 17.963508499669842,
+    "median_ms": 17.547650000778958,
+    "std_ms": 2.463650195350778,
+    "p95_ms": 21.20775499206502,
+    "p99_ms": 30.41275700437836,
+    "min_ms": 14.025099982973188,
+    "max_ms": 31.867499987129122,
+    "n_runs": 200
+  },
+  "onnxruntime": {
+    "mean_ms": 2.775658000318799,
+    "median_ms": 2.7751000015996397,
+    "std_ms": 0.24086488168763326,
+    "p95_ms": 3.2211399637162685,
+    "p99_ms": 3.4641079872380915,
+    "min_ms": 2.2888000239618123,
+    "max_ms": 3.861200006213039,
+    "n_runs": 200
+  },
+  "speedup": {
+    "mean": 6.472,
+    "median": 6.323
+  }
+}
