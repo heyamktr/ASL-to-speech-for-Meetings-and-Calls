@@ -15,10 +15,17 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 LANDMARK_COUNT = 144  # 63 right hand + 63 left hand + 18 pose
+HAND_DIMS = 126  # first 126 values are the two hands; 126:144 is pose
 
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _has_hand(landmarks: list[float]) -> bool:
+    """A hand is present if any of the 126 hand-landmark values are non-zero.
+    MediaPipe sends all-zero hand blocks when no hand is detected."""
+    return any(value != 0.0 for value in landmarks[:HAND_DIMS])
 
 
 def _validate_message(payload: Any) -> tuple[list[float], str, int | float]:
@@ -68,7 +75,7 @@ async def _predict_loop(websocket: WebSocket) -> None:
             response: dict[str, Any] = {"timestamp": timestamp}
             ran_inference = False
 
-            frames = await add_frame(session_id, landmarks)
+            frames = await add_frame(session_id, landmarks, has_hand=_has_hand(landmarks))
             if frames is not None:
                 classifier = websocket.app.state.classifier
                 prediction, confidence = classifier.predict(
@@ -76,7 +83,15 @@ async def _predict_loop(websocket: WebSocket) -> None:
                 )
                 ran_inference = True
 
-                if await should_emit(session_id, prediction):
+                emitted = await should_emit(session_id, prediction)
+                logger.info(
+                    "inference session_id=%s prediction=%s confidence=%.3f emitted=%s",
+                    session_id,
+                    prediction,
+                    confidence,
+                    emitted,
+                )
+                if emitted:
                     response["prediction"] = prediction
                     response["confidence"] = confidence
 

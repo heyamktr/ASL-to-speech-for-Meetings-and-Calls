@@ -1,0 +1,100 @@
+{
+  "original_path": "D:\\Project\\ASL-to-speech-for-Meetings-and-Calls\\model-training\\exports\\asl_model.onnx",
+  "quantized_path": "D:\\Project\\ASL-to-speech-for-Meetings-and-Calls\\model-training\\exports\\asl_model_quant.onnx",
+  "size": {
+    "original_kb": 2186.8,
+    "quantized_kb": 2006.5,
+    "reduction_pct": 8.2
+  },
+  "operators": {
+    "original": {
+      "MatMul": 2,
+      "Add": 2,
+      "LayerNormalization": 1,
+      "Relu": 1,
+      "Shape": 2,
+      "Constant": 21,
+      "Gather": 2,
+      "Unsqueeze": 4,
+      "Concat": 1,
+      "ConstantOfShape": 1,
+      "Transpose": 4,
+      "Slice": 2,
+      "GRU": 2,
+      "Reshape": 2,
+      "Squeeze": 1,
+      "Cast": 2,
+      "Range": 1,
+      "GreaterOrEqual": 1,
+      "Where": 1,
+      "Softmax": 1,
+      "Mul": 1,
+      "ReduceSum": 1,
+      "Gemm": 1
+    },
+    "quantized": {
+      "DynamicQuantizeLinear": 3,
+      "Unsqueeze": 4,
+      "Mul": 7,
+      "MatMulInteger": 3,
+      "Cast": 3,
+      "Add": 3,
+      "LayerNormalization": 1,
+      "Relu": 1,
+      "Shape": 2,
+      "Transpose": 4,
+      "Gather": 2,
+      "Concat": 1,
+      "ConstantOfShape": 1,
+      "Slice": 2,
+      "GRU": 2,
+      "Reshape": 2,
+      "Range": 1,
+      "GreaterOrEqual": 1,
+      "Squeeze": 1,
+      "Where": 1,
+      "Softmax": 1,
+      "ReduceSum": 1
+    },
+    "quantization_ops_added": {
+      "DynamicQuantizeLinear": 3,
+      "MatMulInteger": 3
+    }
+  },
+  "accuracy": {
+    "max_logit_diff": 0.0023,
+    "mean_logit_diff": 0.0019,
+    "mean_cosine_sim": 0.999985,
+    "top1_agreement_rate": 1.0
+  },
+  "benchmark_config": {
+    "warmup_runs": 20,
+    "timed_runs": 200,
+    "device": "cpu",
+    "onnxruntime_version": "1.26.0"
+  },
+  "fp32_onnx": {
+    "mean_ms": 2.5723510023090057,
+    "median_ms": 2.6105500000994653,
+    "std_ms": 0.5443594080943158,
+    "p95_ms": 2.9717700352193783,
+    "p99_ms": 5.274282015161577,
+    "min_ms": 2.0874000038020313,
+    "max_ms": 6.938999984413385,
+    "n_runs": 200
+  },
+  "int8_quantized": {
+    "mean_ms": 2.550417501188349,
+    "median_ms": 2.5677999947220087,
+    "std_ms": 0.42814213672239054,
+    "p95_ms": 3.076010016957298,
+    "p99_ms": 4.629437958938068,
+    "min_ms": 2.0949000027030706,
+    "max_ms": 5.155199964065105,
+    "n_runs": 200
+  },
+  "speedup": {
+    "mean": 1.009,
+    "median": 1.017
+  }
+}

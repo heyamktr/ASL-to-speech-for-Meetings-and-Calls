@@ -1,4 +1,5 @@
 import json
+
 from redis import asyncio as aioredis
 
 from app.config import settings
@@ -11,30 +12,40 @@ redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
 
 BUFFER_KEY = lambda sid: f"session:{sid}:frames"
 SMOOTHING_KEY = lambda sid: f"session:{sid}:smooth"
-COUNTER_KEY = lambda sid: f"session:{sid}:counter"
+SINCE_KEY = lambda sid: f"session:{sid}:since"  # frames since last inference
 
 
-async def add_frame(session_id: str, landmarks: list[float]) -> list[list[float]] | None:
-    """
-    Append one frame to the session buffer.
-    Returns the full window when the buffer is full AND the stride counter fires.
-    Inference runs every INFERENCE_STRIDE frames rather than on every frame.
+async def add_frame(
+    session_id: str, landmarks: list[float], has_hand: bool = True
+) -> list[list[float]] | None:
+    """Append one frame to the session buffer.
+
+    Returns the full window when the buffer is full AND enough frames have
+    elapsed since the last inference. The stride is *adaptive*: while a hand is
+    visible we run every ``inference_stride`` frames; when no hand is detected we
+    back off to ``idle_inference_stride`` so idle sessions don't waste CPU and
+    overall latency under load stays low (Week 5 latency lever #1).
     """
     pipe = redis_client.pipeline()
     pipe.rpush(BUFFER_KEY(session_id), json.dumps(landmarks))
     pipe.ltrim(BUFFER_KEY(session_id), -FRAME_WINDOW, -1)
-    pipe.incr(COUNTER_KEY(session_id))
+    pipe.incr(SINCE_KEY(session_id))
     pipe.expire(BUFFER_KEY(session_id), SESSION_TTL)
-    pipe.expire(COUNTER_KEY(session_id), SESSION_TTL)
+    pipe.expire(SINCE_KEY(session_id), SESSION_TTL)
     pipe.llen(BUFFER_KEY(session_id))
     results = await pipe.execute()
 
+    since: int = results[2]
     length: int = results[5]
-    counter: int = results[2]
 
-    if length < FRAME_WINDOW or counter % settings.inference_stride != 0:
+    stride = settings.inference_stride if has_hand else settings.idle_inference_stride
+    stride = max(1, stride)
+
+    if length < FRAME_WINDOW or since < stride:
         return None
 
+    # Reset the stride counter and return the window for inference.
+    await redis_client.set(SINCE_KEY(session_id), 0, ex=SESSION_TTL)
     raw_frames = await redis_client.lrange(BUFFER_KEY(session_id), 0, -1)
     return [json.loads(frame) for frame in raw_frames]
 
