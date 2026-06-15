@@ -6,3 +6,4 @@ redis
 onnxruntime
 numpy
 python-dotenv
+pyttsx3

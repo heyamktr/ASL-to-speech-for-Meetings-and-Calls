@@ -7,6 +7,9 @@ services:
       - REDIS_URL=redis://redis:6379
       - MODEL_PATH=/app/models/asl_model.onnx
       - LOG_LEVEL=INFO
+      # TEMP (end-to-end pipeline test): emit any top guess so the overlay/TTS
+      # path is exercised regardless of accuracy. Revert to 0.4 (the default) when done.
+      - CONFIDENCE_THRESHOLD=0.05
     depends_on:
       redis:
         condition: service_healthy

@@ -1,8 +1,11 @@
-"""Concurrent WebSocket latency benchmark.
+"""Concurrent WebSocket latency benchmark + capacity sweep.
 
 Usage:
     python scripts/load_test.py
     python scripts/load_test.py --url ws://your-server/ws --sessions 20 --frames 300
+
+    # Capacity sweep: ramp concurrency until p95 latency degrades past a threshold
+    python scripts/load_test.py --sweep --steps 1,5,10,25,50,100 --p95-budget 200
 """
 
 import argparse
@@ -82,15 +85,50 @@ def report(results: list[SessionResult], elapsed: float) -> None:
     print(f"{'='*52}\n")
 
 
+async def run_level(
+    url: str, num_sessions: int, num_frames: int
+) -> tuple[list[SessionResult], float]:
+    start = time.perf_counter()
+    results = await asyncio.gather(
+        *[run_session(url, num_frames) for _ in range(num_sessions)]
+    )
+    elapsed = time.perf_counter() - start
+    return list(results), elapsed
+
+
 async def main(url: str, num_sessions: int, num_frames: int) -> None:
     print(f"Load test: {num_sessions} concurrent sessions × {num_frames} frames")
     print(f"Target:    {url}\n")
+    results, elapsed = await run_level(url, num_sessions, num_frames)
+    report(results, elapsed)
 
-    start = time.perf_counter()
-    results = await asyncio.gather(*[run_session(url, num_frames) for _ in range(num_sessions)])
-    elapsed = time.perf_counter() - start
 
-    report(list(results), elapsed)
+async def sweep(url: str, steps: list[int], num_frames: int, p95_budget: float) -> None:
+    """Ramp concurrency and find the max level whose p95 stays within budget."""
+    print(f"Capacity sweep on {url}")
+    print(f"Frames/session: {num_frames}   p95 budget: {p95_budget:.0f} ms\n")
+    header = f"{'Sessions':>9}{'p50 ms':>10}{'p95 ms':>10}{'p99 ms':>10}"
+    print(header + f"{'errors':>8}{'within budget':>15}")
+    print("-" * 62)
+
+    max_ok = 0
+    for n in steps:
+        results, _ = await run_level(url, n, num_frames)
+        latencies = sorted(ms for r in results for ms in r.latencies_ms)
+        errors = sum(r.errors for r in results)
+        if not latencies:
+            print(f"{n:>9}{'-':>10}{'-':>10}{'-':>10}{errors:>8}{'NO DATA':>15}")
+            break
+        p50 = _percentile(latencies, 0.50)
+        p95 = _percentile(latencies, 0.95)
+        p99 = _percentile(latencies, 0.99)
+        ok = p95 <= p95_budget and errors == 0
+        if ok:
+            max_ok = n
+        print(f"{n:>9}{p50:>10.1f}{p95:>10.1f}{p99:>10.1f}{errors:>8}{('yes' if ok else 'NO'):>15}")
+
+    print("-" * 62)
+    print(f"\nMax concurrent sessions within {p95_budget:.0f} ms p95 budget: {max_ok}")
 
 
 if __name__ == "__main__":
@@ -98,6 +136,15 @@ if __name__ == "__main__":
     parser.add_argument("--url", default="ws://localhost:8000/ws")
     parser.add_argument("--sessions", type=int, default=10, help="concurrent sessions")
     parser.add_argument("--frames", type=int, default=200, help="frames per session")
+    parser.add_argument("--sweep", action="store_true", help="run a capacity sweep")
+    parser.add_argument("--steps", default="1,5,10,25,50,100",
+                        help="comma-separated concurrency levels for --sweep")
+    parser.add_argument("--p95-budget", type=float, default=200.0,
+                        help="p95 latency budget in ms for --sweep")
     args = parser.parse_args()
 
-    asyncio.run(main(args.url, args.sessions, args.frames))
+    if args.sweep:
+        levels = [int(s) for s in args.steps.split(",") if s.strip()]
+        asyncio.run(sweep(args.url, levels, args.frames, args.p95_budget))
+    else:
+        asyncio.run(main(args.url, args.sessions, args.frames))

@@ -1,0 +1,27 @@
+{
+  "config": {
+    "seq_len": 100,
+    "input_dim": 292,
+    "hidden_size": 128,
+    "num_layers": 2,
+    "num_classes": 100,
+    "torch_version": "2.12.0+cpu",
+    "device": "cpu"
+  },
+  "results": {
+    "gru": {
+      "params": 558309,
+      "mean_ms": 21.24306199955754,
+      "median_ms": 20.541949990729336,
+      "p95_ms": 27.481810002063863,
+      "p99_ms": 36.3247090013465
+    },
+    "transformer": {
+      "params": 447333,
+      "mean_ms": 2.084227999439463,
+      "median_ms": 1.9483499927446246,
+      "p95_ms": 2.86187999881804,
+      "p99_ms": 3.456160007335712
+    }
+  }
+}

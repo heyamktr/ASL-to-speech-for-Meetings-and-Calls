@@ -16,7 +16,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from src.models.lstm import SignGRU
+from src.models import build_model
 from src.train import LandmarkDataset, temporal_crop, add_velocity, TTA_CROPS, SEQ_LEN
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -152,7 +152,8 @@ def main() -> None:
     print(f"Trained for {ckpt['epoch']} epochs  |  val_acc={ckpt['val_acc']:.3f}")
     print(f"Config: {cfg}")
 
-    model = SignGRU(
+    model = build_model(
+        cfg.get("arch", "gru"),
         input_size=cfg["input_size"],
         hidden_size=cfg["hidden_size"],
         num_layers=cfg["num_layers"],

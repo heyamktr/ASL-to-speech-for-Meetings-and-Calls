@@ -12,8 +12,9 @@ let isRunning = false;
 let localDetectionState: DetectionState = 'idle';
 
 function hasHands(landmarks: number[]): boolean {
-  // Indices 132-257 are left + right hand landmarks; all zeros means no hands detected
-  return landmarks.slice(132).some((v) => v !== 0);
+  // Indices [0:126] are right + left hand landmarks (21 × 3 each); [126:144] is pose.
+  // All-zero hand block means MediaPipe detected no hands. Matches backend _has_hand.
+  return landmarks.slice(0, 126).some((v) => v !== 0);
 }
 
 function updateDetectionState(next: DetectionState, extra?: { word: string; confidence: number }): void {
@@ -26,12 +27,22 @@ function updateDetectionState(next: DetectionState, extra?: { word: string; conf
 }
 
 function onPrediction(msg: PredictionMessage): void {
-  // Most frames carry only a timestamp; the backend includes a prediction just
-  // once per sign. Ignore empty frames and the low-confidence "uncertain"
-  // fallback — let the hand tracker own the idle/thinking/no_hand state.
   if (!msg.prediction || msg.prediction === "uncertain") return;
   updateDetectionState('predicted', { word: msg.prediction, confidence: msg.confidence ?? 0 });
   addWordToOverlay(msg.prediction);
+
+  // Speak the word — postMessage reaches inject.ts in the MAIN world
+  getSettings().then(({ voiceEnabled, ttsEndpoint, speechRate, speechPitch, voiceURI }) => {
+    if (!voiceEnabled) return;
+    window.postMessage({
+      type: 'ASL_SPEAK_WORD',
+      word: msg.prediction,
+      ttsEndpoint,
+      rate: speechRate,
+      pitch: speechPitch,
+      voiceURI,
+    }, '*');
+  });
 }
 
 async function start(): Promise<void> {

@@ -16,7 +16,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
   flex-direction: column;
   border-radius: 14px;
   overflow: clip; /* clips children to border-radius without affecting absolute resize handle */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Lora', Georgia, 'Times New Roman', serif;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   min-width: 220px;
@@ -26,48 +26,33 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 /* ── Themes ──────────────────────────────────────────────────── */
 
 .panel[data-theme="dark"] {
-  background: rgba(12, 12, 24, 0.93);
-  color: #e8e8ff;
-  border: 1px solid rgba(255,255,255,0.09);
-  box-shadow: 0 12px 40px rgba(0,0,0,0.75), 0 0 0 0.5px rgba(255,255,255,0.05);
-  --accent: #a78bfa;
-  --muted: #6b6b8a;
-  --header-bg: rgba(18, 14, 36, 0.98);
-  --peer-bg: rgba(16, 20, 44, 0.9);
-  --btn-bg: rgba(255,255,255,0.07);
-  --btn-hover: rgba(255,255,255,0.14);
-  --divider: rgba(255,255,255,0.07);
-  --block-bg: rgba(255,255,255,0.04);
+  background: rgba(10, 26, 47, 0.94);
+  color: #e6f6f4;
+  border: 1px solid rgba(45,212,191,0.18);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(45,212,191,0.08);
+  --accent: #2dd4bf;
+  --muted: #7ba8b3;
+  --header-bg: rgba(12, 33, 56, 0.98);
+  --peer-bg: rgba(9, 28, 48, 0.92);
+  --btn-bg: rgba(45,212,191,0.12);
+  --btn-hover: rgba(45,212,191,0.24);
+  --divider: rgba(45,212,191,0.16);
+  --block-bg: rgba(45,212,191,0.08);
 }
 
 .panel[data-theme="light"] {
-  background: rgba(255,255,255,0.95);
-  color: #1a1a2e;
-  border: 1px solid rgba(0,0,0,0.10);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-  --accent: #7c3aed;
-  --muted: #8b8ba7;
-  --header-bg: rgba(248,246,255,0.98);
-  --peer-bg: rgba(240,242,255,0.92);
-  --btn-bg: rgba(0,0,0,0.04);
-  --btn-hover: rgba(0,0,0,0.09);
-  --divider: rgba(0,0,0,0.07);
-  --block-bg: rgba(0,0,0,0.03);
-}
-
-.panel[data-theme="high-contrast"] {
-  background: #000;
-  color: #fff;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 2px #fff;
-  --accent: #ffff00;
-  --muted: #aaa;
-  --header-bg: #111;
-  --peer-bg: #0a0a0a;
-  --btn-bg: rgba(255,255,255,0.10);
-  --btn-hover: rgba(255,255,255,0.22);
-  --divider: rgba(255,255,255,0.25);
-  --block-bg: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.96);
+  color: #0f2e2b;
+  border: 1px solid rgba(13,148,136,0.18);
+  box-shadow: 0 8px 32px rgba(13,148,136,0.16);
+  --accent: #0d9488;
+  --muted: #5e8a86;
+  --header-bg: rgba(240, 251, 250, 0.98);
+  --peer-bg: rgba(236, 250, 248, 0.94);
+  --btn-bg: rgba(13,148,136,0.08);
+  --btn-hover: rgba(13,148,136,0.16);
+  --divider: rgba(13,148,136,0.14);
+  --block-bg: rgba(13,148,136,0.06);
 }
 
 /* ── Header ──────────────────────────────────────────────────── */
@@ -189,10 +174,29 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 /* ── Section divider ─────────────────────────────────────────── */
 
 .section-divider {
-  height: 1px;
-  background: var(--divider);
+  position: relative;
+  height: 9px;
   flex-shrink: 0;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid var(--divider);
+  border-bottom: 1px solid var(--divider);
+  background: var(--block-bg);
+  user-select: none;
+  touch-action: none;
 }
+.section-divider:hover { background: var(--btn-hover); }
+
+.divider-grip {
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--muted);
+  opacity: 0.5;
+}
+.section-divider:hover .divider-grip { opacity: 0.9; }
 
 /* ── Peer transcript section ─────────────────────────────────── */
 
@@ -201,8 +205,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
   background: var(--peer-bg);
   overflow-y: auto;
   padding: 7px 12px 9px;
-  min-height: 60px;
-  max-height: 40%;
+  /* height is set inline and adjusted by dragging the divider */
 }
 
 .peer-header {
