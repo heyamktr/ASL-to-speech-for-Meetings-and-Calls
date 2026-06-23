@@ -12,27 +12,37 @@
     "build:js": "node esbuild.config.mjs",
     "build:css": "postcss src/styles/globals.css -o dist/styles.css",
     "lint": "eslint src --ext .ts,.tsx",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\"",
+    "test": "jest --config jest.config.cjs"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/preset-env": "^7.29.7",
+    "@babel/preset-react": "^7.29.7",
+    "@babel/preset-typescript": "^7.29.7",
     "@types/chrome": "^0.0.270",
+    "@types/jest": "^30.0.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "autoprefixer": "^10.4.20",
+    "babel-jest": "^29.7.0",
     "concurrently": "^9.0.0",
     "esbuild": "^0.23.1",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.35.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "postcss": "^8.4.45",
     "postcss-cli": "^11.0.0",
     "prettier": "^3.3.3",
     "tailwindcss": "^3.4.10",
+    "ts-jest": "^29.4.11",
     "typescript": "^5.5.4"
   }
 }
