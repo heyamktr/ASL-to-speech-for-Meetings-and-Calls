@@ -23,14 +23,14 @@ export interface RuntimeState {
 
 const SETTINGS_DEFAULTS: StoredSettings = {
   enabled: false,
-  backendUrl: 'ws://localhost:8000/ws',
+  backendUrl: 'wss://asl-to-speech-for-meetings-and-calls-sunlit-wind-7569.fly.dev/ws',
   theme: 'dark',
   fontSize: 20,
   voiceEnabled: false,
   voiceURI: '',
   speechRate: 1.0,
   speechPitch: 1.0,
-  ttsEndpoint: 'https://localhost:8001/tts',
+  ttsEndpoint: 'https://asl-to-speech-for-meetings-and-calls-sunlit-wind-7569.fly.dev/tts',
 };
 
 const STATE_DEFAULTS: RuntimeState = {

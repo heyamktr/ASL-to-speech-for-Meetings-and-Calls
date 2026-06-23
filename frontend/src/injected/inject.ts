@@ -13,7 +13,7 @@ let voicePrefs = {
   rate: 1.0,
   pitch: 1.0,
   voiceURI: '',
-  ttsEndpoint: 'http://localhost:8001/tts',
+  ttsEndpoint: 'https://asl-to-speech-for-meetings-and-calls-sunlit-wind-7569.fly.dev/tts',
 };
 
 navigator.mediaDevices.getUserMedia = async function (constraints) {

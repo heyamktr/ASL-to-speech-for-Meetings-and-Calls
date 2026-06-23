@@ -16,7 +16,9 @@
 
   "host_permissions": [
     "https://meet.google.com/*",
-    "https://zoom.us/*"
+    "https://zoom.us/*",
+    "https://asl-to-speech-for-meetings-and-calls-sunlit-wind-7569.fly.dev/*",
+    "wss://asl-to-speech-for-meetings-and-calls-sunlit-wind-7569.fly.dev/*"
   ],
 
   "content_scripts": [
