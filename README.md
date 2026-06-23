@@ -1,166 +1,296 @@
-# ASL-to-Speech
+# ASL-to-Speech for Meetings & Calls
 
-A Chrome extension that translates ASL (American Sign Language) signs into voice and text in real time during video calls — Google Meet, Zoom Web, Messenger, and Microsoft Teams Web.
+> A privacy-first Chrome extension that translates American Sign Language into spoken voice **in real time** during Google Meet, Zoom Web, Messenger, and Microsoft Teams — so deaf and hard-of-hearing users can be heard without any change on their participants' end.
 
-The extension runs **MediaPipe Holistic** in the browser to extract **144 numbers per frame** (21 right-hand + 21 left-hand landmarks × x/y/z, plus 6 upper-body pose joints × x/y/z), and sends only those numbers — never video — over a WebSocket to a FastAPI server. The server buffers frames into a sliding window, runs a **bidirectional GRU classifier exported to ONNX** (`SignGRU`, 100-word WLASL vocabulary), and returns the predicted word. Recognized words appear in an overlay panel and can be synthesized to audio via the server's TTS endpoint and mixed into the meeting's microphone stream so other participants hear a natural voice.
+---
 
-## Repository layout
+## What It Does
 
-This is a monorepo with three independent parts. Each has its own dependencies and runs independently of the others.
+Turn on the extension. Sign in front of your webcam. Your ASL signs are recognized, displayed in an overlay panel, and synthesized into audio that is injected directly into your microphone stream — other participants hear a natural voice without installing anything.
 
-```
-ASL-to-Speech/
-├── .gitignore                          # OS files, editor cruft (.DS_Store, .vscode/, etc.)
-├── .editorconfig                       # consistent indentation across editors
-├── README.md                           # this file
-├── CODEBASE_TOUR.md                    # end-to-end walkthrough of how a frame flows through the system
-├── Makefile                            # convenience shortcuts: backend-dev, frontend-build, train, ...
-│
-├── backend/                            # FastAPI inference server (Python 3.11)
-│   ├── .gitignore                      # __pycache__, .venv, .env, models/*.onnx
-│   ├── README.md                       # how to run locally + with Docker
-│   ├── STRESS_TEST.md                  # latency/capacity stress-test procedure + results template
-│   ├── requirements.txt                # fastapi, uvicorn, gunicorn, websockets, redis, onnxruntime, numpy, pyttsx3
-│   ├── requirements-dev.txt            # pytest, ruff, black
-│   ├── Dockerfile                      # production container image (includes espeak-ng for TTS)
-│   ├── docker-compose.yml              # FastAPI + Redis, one command to boot the stack
-│   ├── .env.example                    # template (REDIS_URL, MODEL_PATH, CONFIDENCE_THRESHOLD, ...)
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py                     # FastAPI entry — app instance, lifespan, health/ready/metrics/tts routes
-│   │   ├── websocket.py                # WebSocket handler — validates 144 landmarks, runs inference, returns words
-│   │   ├── inference.py                # ONNX Runtime model load + feature build + predict (SignClassifier)
-│   │   ├── cache.py                    # LFU prediction cache keyed by a quantized window fingerprint
-│   │   ├── tts.py                      # offline text-to-speech (pyttsx3 / espeak-ng) → WAV
-│   │   ├── metrics.py                  # active sessions, latency, throughput, cache hit-rate
-│   │   ├── session/
-│   │   │   └── buffer.py               # per-session sliding-window buffer (Redis-backed, adaptive stride)
-│   │   └── config.py                   # env vars / settings loading
-│   ├── scripts/
-│   │   ├── load_test.py                # concurrency sweep — max sessions within a p95 latency budget
-│   │   └── uptime_monitor.py           # health polling with webhook alerting
-│   ├── models/                         # deployed .onnx weights + label_map.json (gitignored, large)
-│   └── tests/                          # pytest: websocket, buffer, cache, tts
-│
-├── frontend/                           # Chrome Extension MV3 (React + TypeScript + esbuild)
-│   ├── .gitignore                      # node_modules, dist
-│   ├── README.md                       # build steps + how to load the unpacked extension in Chrome
-│   ├── package.json
-│   ├── tsconfig.json                   # TypeScript compiler config
-│   ├── esbuild.config.mjs              # bundler — multiple entry points (content, popup, bg, injected)
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   ├── public/
-│   │   ├── manifest.json               # MV3 manifest — permissions, content scripts, host matches
-│   │   ├── mediapipe/                  # bundled MediaPipe Holistic wasm/assets (served locally, no CDN)
-│   │   └── icons/                      # extension icons (16/48/128 px)
-│   ├── src/
-│   │   ├── background/
-│   │   │   └── service-worker.ts       # MV3 background service worker
-│   │   ├── content/                    # scripts injected into Meet/Zoom/Teams pages
-│   │   │   ├── index.tsx               # entry — mounts overlay, starts tracker + WS client
-│   │   │   ├── overlay/                # React overlay UI
-│   │   │   │   ├── App.tsx
-│   │   │   │   ├── OverlayApp.tsx       # top-level overlay component
-│   │   │   │   └── mount.ts             # mount/unmount + word/sentence helpers
-│   │   │   ├── mediapipe/              # HandTracker — drives camera + the injected Holistic bridge
-│   │   │   │   └── index.ts
-│   │   │   └── websocket/              # WS client — sends 144 landmarks, receives predictions
-│   │   │       └── client.ts
-│   │   ├── popup/                      # extension popup (toolbar icon click)
-│   │   │   ├── index.html
-│   │   │   ├── index.tsx
-│   │   │   └── Popup.tsx               # popup UI — toggle, theme, font size, voice
-│   │   ├── injected/                   # MAIN-world scripts (page context, NOT extension context)
-│   │   │   ├── mediapipe-bridge.ts      # runs MediaPipe Holistic, posts back 144 landmark numbers/frame
-│   │   │   └── inject.ts                # overrides getUserMedia to inject TTS audio into the mic stream
-│   │   ├── lib/
-│   │   │   ├── storage.ts              # chrome.storage helpers + runtime state
-│   │   │   ├── messaging.ts            # content ↔ background message passing
-│   │   │   └── types.ts                # shared TypeScript types (LandmarkMessage, PredictionMessage, ...)
-│   │   └── styles/
-│   │       └── globals.css             # Tailwind directives
-│   └── dist/                           # build output (gitignored) — load this directory in Chrome
-│
-├── model-training/                     # PyTorch training pipeline (Python 3.11)
-│   ├── .gitignore                      # data/, checkpoints/, .venv, __pycache__
-│   ├── README.md                       # download WLASL, preprocess, train, export to ONNX
-│   ├── MODEL_CARD.md                   # model card — data, metrics, intended use, limitations
-│   ├── TRAINING_LOG.md                 # experiment log + architecture decision (GRU vs Transformer)
-│   ├── requirements.txt                # torch, mediapipe, opencv-python, numpy, pandas, onnx, onnxruntime
-│   ├── data/                           # WLASL videos + extracted landmarks (gitignored — huge)
-│   │   ├── raw/                        # downloaded WLASL videos
-│   │   └── processed/                  # extracted landmark .npy files + train/val/test .npz
-│   ├── notebooks/                      # exploratory analysis
-│   ├── src/
-│   │   ├── __init__.py
-│   │   ├── preprocessing/
-│   │   │   ├── extract_landmarks.py    # video frames → 144-dim hand+pose landmarks via MediaPipe
-│   │   │   └── build_dataset.py        # normalize, filter to 100 glosses, train/val/test split
-│   │   ├── models/                     # Python classes defining architectures (NOT weight files)
-│   │   │   ├── lstm.py                 # SignGRU (production) + SignLSTM
-│   │   │   └── transformer.py          # SignTransformer — experimental alternative
-│   │   ├── train.py                    # training loop
-│   │   ├── evaluate.py                 # accuracy / confusion matrix on the test split
-│   │   ├── benchmark.py                # PyTorch vs ONNX latency benchmark
-│   │   ├── quantize.py                 # dynamic INT8 quantization of the ONNX model
-│   │   ├── compare_archs.py            # GRU vs Transformer cost/accuracy comparison
-│   │   └── export_onnx.py              # PyTorch checkpoint → .onnx file for the backend
-│   ├── checkpoints/                    # large .pt training checkpoints (gitignored)
-│   └── exports/                        # final .onnx files — copy to backend/models/ for serving
-│
-└── .github/
-    └── workflows/                      # GitHub Actions CI
-```
+**No video is ever sent over the network.** The browser extracts 144 numbers per frame (hand and pose landmark coordinates) and sends only those.
 
-> **Note on `models/` appearing twice.** `backend/models/` stores the deployed `.onnx` weight files served at runtime. `model-training/src/models/` stores the Python classes that define the model architectures (`SignGRU`, `SignLSTM`, `SignTransformer`). One is data, the other is code.
+---
 
-## Quick start
+## Key Technical Highlights
 
-Each part runs independently. See the README inside each folder for detailed instructions.
+| Dimension | Achievement |
+|---|---|
+| **Inference latency** | **2.57 ms** median (ONNX Runtime, CPU-only) — 5.97× faster than PyTorch |
+| **Vocabulary** | 100 ASL word glosses (WLASL dataset) |
+| **Top-1 / Top-3 accuracy** | 63.18% / 81.59% on held-out test set (4-crop TTA) |
+| **Privacy** | Zero video transmitted; only 144 landmark floats per frame over WebSocket |
+| **Model size** | 558K parameters (bidirectional GRU) — chosen over Transformer to avoid overfitting on ~10 samples/class |
+| **Deployment** | Dockerized FastAPI + Redis on Fly.io; auto-scales to zero when idle |
 
-```sh
-# Backend (FastAPI + Redis via Docker) — serves ws://localhost:8000/ws
-make backend-docker
-
-# Frontend (Chrome extension)
-make frontend-install
-make frontend-dev          # watch mode — rebuilds dist/ on save
-# then load frontend/dist/ as an unpacked extension in chrome://extensions
-
-# Model training
-cd model-training
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python -m src.train        # train the GRU
-python -m src.export_onnx  # export checkpoint → .onnx, then copy into backend/models/
-```
-
-Run `make help` from the root to see all available shortcut commands.
-For a step-by-step walkthrough of how one frame flows through the whole system, see [CODEBASE_TOUR.md](CODEBASE_TOUR.md).
+---
 
 ## Architecture
 
 ```
-Browser (Chrome Extension)
-         ↓
-MediaPipe Holistic — runs in browser, never on server
-         ↓
-144 landmark numbers per frame (2 hands + 6 pose joints) — the only thing sent over the network
-         ↓
-WebSocket → FastAPI Server (Dockerized, cloud deployed)
-         ↓
-Redis sliding window (100 frames) + adaptive stride + prediction cache
-         ↓
-Bidirectional GRU / ONNX Inference — model warm at startup
-         ↓
-Confidence threshold + consecutive-frame smoothing
-         ↓
-Predicted Word → WebSocket back to browser
-         ↓
-Overlay UI (sentence builder + transcript panel)
-         ↓
-TTS Endpoint → AudioContext → getUserMedia override → Meet mic stream
-         ↓
-Other participants hear synthetic voice — no action required on their end
+┌─────────────────────────────── Chrome Browser ───────────────────────────────┐
+│                                                                               │
+│  Video Call Tab (Meet / Zoom / Teams / Messenger)                             │
+│    ↓                                                                          │
+│  [injected/mediapipe-bridge.ts]  ← runs in MAIN world (page context)         │
+│    MediaPipe Holistic: extracts 21+21 hand landmarks + 6 pose joints (xyz)   │
+│    → postMessage → 144 floats/frame                                           │
+│    ↓                                                                          │
+│  [content/mediapipe/index.ts]  ← HandTracker (content-script world)          │
+│    requestAnimationFrame loop; manages camera acquisition                     │
+│    ↓                                                                          │
+│  [content/websocket/client.ts]  WSClient                                      │
+│    Exponential-backoff reconnection; buffers up to 100 pending frames        │
+│    ↓  { landmarks: float[144], session_id, timestamp }  over WebSocket       │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+                               │  WebSocket (ws://)
+                               ▼
+┌─────────────────────── FastAPI Backend (Docker / Fly.io) ─────────────────────┐
+│                                                                               │
+│  [websocket.py]  validates 144-dim frame, dispatches to session buffer       │
+│    ↓                                                                          │
+│  [session/buffer.py]  Redis-backed sliding window (100 frames)               │
+│    Adaptive stride: inference every 5 frames (hand visible) or 15 (idle)    │
+│    ↓                                                                          │
+│  [inference.py]  SignClassifier (ONNX Runtime)                               │
+│    Feature pipeline: normalize hand + pose → compute velocity deltas        │
+│    Input: (1, 100, 292)   Output: softmax over 100 classes                  │
+│    LFU cache keyed by quantized window fingerprint (Blake2b)                 │
+│    ↓                                                                          │
+│  Consecutive-frame smoothing gate (word must appear 3× before emit)          │
+│    ↓  { word, confidence }  over WebSocket                                   │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+                               │  WebSocket (response)
+                               ▼
+┌─────────────────────────────── Chrome Browser ───────────────────────────────┐
+│                                                                               │
+│  [content/overlay/]  React 18 overlay panel                                  │
+│    Recognized words, sentence history, peer transcript; resizable/draggable  │
+│    ↓                                                                          │
+│  [injected/inject.ts]  getUserMedia override                                 │
+│    Synthesized speech (server TTS or Web Speech API)                         │
+│    → mixed into the meeting's microphone stream via AudioContext             │
+│    → other participants hear a voice. No action required on their end.       │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Why These Design Decisions?
+
+### Two-world bridge (frontend)
+Chrome's Manifest V3 content scripts run in an isolated sandbox — MediaPipe Holistic cannot be initialized there. The solution: inject a second script into the **page's MAIN world** to run MediaPipe, then relay landmark data back to the content script via `postMessage`. A custom Trusted Types policy ensures CSP compliance on hardened meeting pages.
+
+### Bidirectional GRU over Transformer (model)
+The WLASL dataset provides only ~10 labeled video samples per class. A Transformer (447K params) overfit immediately. The chosen `SignGRU` (558K params, 2-layer bidirectional GRU + temporal attention pooling) converges reliably at this data scale:
+- GRU has ~25% fewer recurrent parameters than LSTM for the same hidden size
+- Temporal attention learns to ignore padding frames without needing positional encodings
+- 4-crop test-time augmentation (TTA) adds +3–5 pp over greedy decoding
+
+### ONNX Runtime (production serving)
+Exporting the trained PyTorch checkpoint to ONNX and running it under ONNX Runtime delivers **5.97× faster inference** at identical accuracy. Dynamic INT8 quantization shaves another 8.2% off file size with negligible accuracy impact. The backend warms the model at startup (3 dummy forward passes) so the first real frame doesn't pay a cold-start penalty.
+
+### Adaptive sliding-window stride (latency lever)
+When no hand is detected in the frame, the stride between inference calls widens from 5 to 15 frames. This cuts idle CPU load by ~3× while keeping responsiveness instant the moment signing resumes.
+
+### LFU prediction cache (latency lever)
+Common windows (frequently signed words, all-zero "no hand" windows) reappear often. A capacity-20 LFU cache keyed by a Blake2b hash of quantized landmark values (rounded to 2 decimal places) turns repeated windows into O(1) lookups. Cache hit rates are exposed at `/metrics`.
+
+### Privacy-by-design
+Every networking decision was made to minimize data exposure. MediaPipe runs **in the browser**; only 144 floating-point numbers per frame are transmitted. No audio, no video, no PII ever leave the device. The WebSocket payload is `{ landmarks: float[144], session_id: uuid, timestamp: epoch_ms }`.
+
+---
+
+## Model Details
+
+### Architecture — `SignGRU`
+
+```
+Input: (batch, seq_len=100, input_dim=292)
+  └─ 146 position features  (normalized hand + pose landmarks)
+  └─ 146 velocity features  (frame-to-frame deltas)
+
+→ Linear(292 → 256) + LayerNorm + ReLU          [input projection]
+→ BiGRU(256 hidden, 2 layers, dropout=0.4)       [temporal encoding]
+→ Temporal attention pooling (padding-masked)    [aggregation]
+→ Linear(512 → 100)                              [classification head]
+
+Parameters: 558,309
+```
+
+### Feature normalization (invariance across signers)
+- **Hands**: center on wrist landmark; scale by wrist-to-middle-knuckle distance
+- **Pose**: center on shoulder midpoint; scale by shoulder width
+- **Hand presence bits**: 1.0 if hand detected, 0.0 for all-zero frames
+- Result: predictions generalize across different hand sizes and camera distances
+
+### Training
+- **Dataset**: WLASL — top-100 highest-frequency glosses; ~10 samples/class
+- **Augmentation**: Mixup (α=0.2), Stochastic Weight Averaging (SWA)
+- **Optimizer**: Adam with cosine LR schedule
+- **Evaluation**: 4-crop TTA (left/right temporal crops × original/mirrored)
+
+### Benchmark — ONNX Runtime vs PyTorch (CPU, 1000 runs)
+
+| Runtime | Median latency | p95 latency | Speedup |
+|---|---|---|---|
+| PyTorch | 15.41 ms | 18.3 ms | 1× |
+| ONNX Runtime | 2.57 ms | 3.1 ms | **5.97×** |
+| ONNX INT8 | 2.61 ms | 3.3 ms | 5.90× |
+
+### Accuracy (test set, 100-class)
+
+| Metric | Score |
+|---|---|
+| Top-1 (greedy) | 59.8% |
+| Top-1 (4-crop TTA) | **63.18%** |
+| Top-3 (4-crop TTA) | **81.59%** |
+| Top-5 (4-crop TTA) | **86.07%** |
+
+---
+
+## Repository Layout
+
+This is a monorepo. Each sub-project has its own dependencies and runs independently.
+
+```
+ASL-to-Speech/
+├── backend/                    # FastAPI inference server (Python 3.11)
+│   ├── app/
+│   │   ├── main.py             # FastAPI app; lifespan loads ONNX model; /health /ready /metrics /tts
+│   │   ├── websocket.py        # WebSocket handler; validates 144 landmarks; dispatches to buffer
+│   │   ├── inference.py        # SignClassifier: ONNX load + warm-up + feature pipeline + predict
+│   │   ├── cache.py            # LFU cache (capacity 20) keyed by Blake2b window fingerprint
+│   │   ├── tts.py              # Offline TTS (pyttsx3 / espeak-ng) → WAV → /tts endpoint
+│   │   ├── metrics.py          # Active sessions, latency histogram, throughput, cache hit-rate
+│   │   ├── session/
+│   │   │   └── buffer.py       # Redis-backed 100-frame sliding window + adaptive stride
+│   │   └── config.py           # Env-var settings (REDIS_URL, MODEL_PATH, CONFIDENCE_THRESHOLD…)
+│   ├── scripts/
+│   │   ├── load_test.py        # Concurrency sweep — max sessions within p95 latency budget
+│   │   └── uptime_monitor.py   # Health polling with webhook alerting
+│   ├── Dockerfile              # Python 3.11-slim + espeak-ng; runs gunicorn
+│   ├── docker-compose.yml      # FastAPI + Redis; one command to boot
+│   └── fly.toml                # Fly.io config (1 shared CPU, 1 GB RAM, auto-scale to zero)
+│
+├── frontend/                   # Chrome Extension MV3 (TypeScript + React 18 + esbuild)
+│   ├── src/
+│   │   ├── content/
+│   │   │   ├── index.tsx       # Entry: mounts overlay, starts HandTracker + WSClient
+│   │   │   ├── overlay/        # React overlay (word display, sentence history, transcript panel)
+│   │   │   ├── mediapipe/      # HandTracker: camera acquisition + rAF loop + bridge messaging
+│   │   │   └── websocket/      # WSClient: sends landmarks, receives predictions, exponential backoff
+│   │   ├── injected/
+│   │   │   ├── mediapipe-bridge.ts   # MAIN-world: runs MediaPipe Holistic, posts 144 floats/frame
+│   │   │   └── inject.ts             # getUserMedia override: mixes TTS audio into mic stream
+│   │   ├── popup/              # Extension toolbar popup (toggle, voice, font size)
+│   │   ├── background/         # MV3 service worker
+│   │   └── lib/                # Shared types, chrome.storage helpers, messaging utilities
+│   ├── public/
+│   │   ├── manifest.json       # MV3 manifest: permissions, host matches, content scripts
+│   │   └── mediapipe/          # Bundled MediaPipe Holistic WASM (no CDN dependency)
+│   └── esbuild.config.mjs      # 4 entry points: content, popup, background, injected
+│
+├── model-training/             # PyTorch training pipeline (Python 3.11)
+│   ├── src/
+│   │   ├── models/
+│   │   │   ├── lstm.py         # SignGRU (production) + SignLSTM
+│   │   │   └── transformer.py  # SignTransformer (experimental; ablation showed GRU wins at this data scale)
+│   │   ├── preprocessing/
+│   │   │   ├── extract_landmarks.py  # WLASL videos → 144-dim landmark sequences via MediaPipe
+│   │   │   └── build_dataset.py      # Filter to 100 glosses; normalize; train/val/test split
+│   │   ├── train.py            # Training loop: mixup, SWA, cosine LR, TTA evaluation
+│   │   ├── evaluate.py         # Top-k accuracy + per-class confusion matrix
+│   │   ├── benchmark.py        # PyTorch vs ONNX Runtime latency comparison
+│   │   ├── quantize.py         # Dynamic INT8 quantization of the ONNX model
+│   │   ├── compare_archs.py    # GRU vs Transformer cost/accuracy ablation
+│   │   └── export_onnx.py      # PyTorch checkpoint → .onnx + label_map.json
+│   ├── MODEL_CARD.md           # Intended use, training data, metrics, known limitations
+│   └── TRAINING_LOG.md         # Week-by-week experiment log and architecture decisions
+│
+├── CODEBASE_TOUR.md            # Step-by-step walkthrough of one frame end-to-end
+└── Makefile                    # Convenience shortcuts for all three sub-projects
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Extension** | Chrome MV3, TypeScript, React 18, esbuild, Tailwind CSS |
+| **Computer Vision** | MediaPipe Holistic (WASM, bundled locally) |
+| **Backend** | Python 3.11, FastAPI, WebSockets, Gunicorn |
+| **Cache / Session** | Redis (sliding window buffer, per-session isolation) |
+| **ML Framework** | PyTorch (training), ONNX Runtime (serving, 5.97× faster) |
+| **TTS** | pyttsx3 / espeak-ng (offline, no third-party API) |
+| **Deployment** | Docker, docker-compose, Fly.io (auto-scale to zero) |
+| **CI** | GitHub Actions |
+
+---
+
+## Quick Start
+
+Each part runs independently.
+
+```sh
+# 1. Backend — FastAPI + Redis (Docker required)
+make backend-docker
+# Server is now at ws://localhost:8000/ws
+
+# 2. Frontend — Chrome Extension
+make frontend-install
+make frontend-dev        # watch mode: rebuilds dist/ on every save
+# Open chrome://extensions → enable Developer mode → Load unpacked → select frontend/dist/
+
+# 3. Model training (optional — pre-trained .onnx is in backend/models/)
+cd model-training
+python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+python -m src.preprocessing.extract_landmarks       # extract from WLASL videos
+python -m src.preprocessing.build_dataset          # build train/val/test splits
+python -m src.train                                 # train SignGRU
+python -m src.export_onnx                          # export to .onnx
+cp exports/sign_gru.onnx backend/models/           # deploy to backend
+```
+
+Run `make help` from the repo root for all available commands.
+
+---
+
+## Backend Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness probe |
+| `GET` | `/ready` | Readiness probe (checks model + Redis) |
+| `GET` | `/metrics` | Active sessions, latency stats, cache hit-rate |
+| `WebSocket` | `/ws` | Main inference endpoint (receives landmarks, returns predictions) |
+| `POST` | `/tts` | Synthesize text → WAV (offline, espeak-ng) |
+| `GET` | `/voices` | List available TTS voices |
+
+---
+
+## Supported Platforms
+
+| Platform | URL pattern |
+|---|---|
+| Google Meet | `meet.google.com/*` |
+| Zoom Web | `app.zoom.us/*` |
+| Facebook Messenger | `www.messenger.com/*` |
+| Microsoft Teams Web | `teams.microsoft.com/*` |
+
+---
+
+## Further Reading
+
+- [CODEBASE_TOUR.md](CODEBASE_TOUR.md) — End-to-end walkthrough of how one camera frame becomes a spoken word
+- [model-training/MODEL_CARD.md](model-training/MODEL_CARD.md) — Model card: intended use, data, metrics, limitations
+- [model-training/TRAINING_LOG.md](model-training/TRAINING_LOG.md) — Experiment log and architecture decision rationale
+- [backend/STRESS_TEST.md](backend/STRESS_TEST.md) — Latency/capacity stress-test procedure and results
+- [backend/README.md](backend/README.md) — Backend local dev and Docker setup
+- [frontend/README.md](frontend/README.md) — Extension build steps and loading in Chrome
+- [model-training/README.md](model-training/README.md) — Full training pipeline walkthrough
