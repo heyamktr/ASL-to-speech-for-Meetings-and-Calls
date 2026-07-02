@@ -144,6 +144,9 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
   border-radius: 8px;
   border-left: 3px solid var(--accent);
   flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .current-text {
@@ -153,6 +156,30 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
   min-height: 1.5em;
   word-spacing: 0.08em;
   letter-spacing: 0.01em;
+  flex: 1;
+}
+
+.speak-btn {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--btn-bg);
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: background 0.12s, opacity 0.12s;
+  align-self: center;
+}
+.speak-btn:hover:not(:disabled) { background: var(--btn-hover); }
+.speak-btn:disabled { opacity: 0.35; cursor: default; }
+
+.refining-tag {
+  color: var(--muted);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.8em;
 }
 
 .cursor {
@@ -335,7 +362,7 @@ let hostEl: HTMLElement | null = null;
 let reactRoot: ReturnType<typeof createRoot> | null = null;
 let overlayCallbacks: OverlayCallbacks | null = null;
 
-export function mountOverlay(onClose: () => void): void {
+export function mountOverlay(onClose: () => void, onSpeak: () => void): void {
   if (hostEl) return;
 
   hostEl = document.createElement('div');
@@ -359,6 +386,7 @@ export function mountOverlay(onClose: () => void): void {
     createElement(OverlayApp, {
       onReady: (cbs) => { overlayCallbacks = cbs; },
       onClose,
+      onSpeak,
     })
   );
 }
@@ -373,6 +401,17 @@ export function unmountOverlay(): void {
 
 export function addWordToOverlay(word: string): void {
   overlayCallbacks?.addWord(word);
+}
+
+// Move the live gloss line into a finalized block shown in "refining…" state and
+// return its id. Returns -1 if the overlay isn't mounted.
+export function beginOverlayBlock(gloss: string): number {
+  return overlayCallbacks?.beginBlock(gloss) ?? -1;
+}
+
+// Replace a finalized block's text with the rewritten sentence and stop its spinner.
+export function resolveOverlayBlock(id: number, sentence: string): void {
+  overlayCallbacks?.resolveBlock(id, sentence);
 }
 
 export function clearOverlay(): void {

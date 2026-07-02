@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
@@ -9,6 +10,7 @@ from app.cache import PredictionCache
 from app.config import settings
 from app.inference import SignClassifier
 from app.metrics import metrics
+from app.refine import RefineRequest, RefineResponse, refine_gloss
 from app.session.buffer import redis_client
 from app.tts import TTSRequest, TTSUnavailable, list_voices, synthesize
 from app.websocket import router as websocket_router
@@ -41,6 +43,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ASL-to-Speech Inference Server", lifespan=lifespan)
+
+# The extension calls /refine and /tts cross-origin from the Google Meet / Zoom
+# page context, so the browser needs permissive CORS to read those responses.
+# This is a public, unauthenticated inference server — allowing all origins is
+# acceptable and is required for the voice-output (mic-mixing) path to work.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
@@ -93,6 +106,26 @@ async def tts(req: TTSRequest):
         media_type="audio/wav",
         headers={"Content-Disposition": 'inline; filename="speech.wav"'},
     )
+
+
+@app.post("/refine", response_model=RefineResponse)
+async def refine(req: RefineRequest) -> RefineResponse:
+    """Rewrite recognized ASL gloss words into one natural English sentence.
+
+    Falls back to a deterministic local join (capitalize + join + period) when the
+    LLM is disabled or unavailable, so the caller always receives a usable sentence
+    and never a 5xx for an LLM/availability problem.
+    """
+    api_key = settings.gemini_api_key if settings.llm_enabled else ""
+    sentence, source = await run_in_threadpool(
+        refine_gloss,
+        req.words,
+        api_key=api_key,
+        model=settings.llm_model,
+        max_tokens=settings.llm_max_tokens,
+        max_words=settings.llm_max_words,
+    )
+    return RefineResponse(sentence=sentence, source=source)
 
 
 @app.get("/voices")

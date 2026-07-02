@@ -5,7 +5,9 @@ import type { Theme } from '../../lib/storage';
 
 interface SentenceBlock {
   id: number;
-  sentence: string;
+  gloss: string;        // raw space-joined signs, shown while the sentence is refining
+  sentence: string;     // the rewritten natural sentence ('' until resolved)
+  refining: boolean;    // true while the /refine call is in flight
   timestamp: Date;
 }
 
@@ -18,12 +20,15 @@ interface PeerEntry {
 
 export interface OverlayCallbacks {
   addWord: (word: string) => void;
+  beginBlock: (gloss: string) => number;
+  resolveBlock: (id: number, sentence: string) => void;
   clear: () => void;
 }
 
 interface Props {
   onReady: (cbs: OverlayCallbacks) => void;
   onClose: () => void;
+  onSpeak: () => void;
 }
 
 const MIN_W = 220;
@@ -66,7 +71,7 @@ let _peerId = 0;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function OverlayApp({ onReady, onClose }: Props) {
+export function OverlayApp({ onReady, onClose, onSpeak }: Props) {
   const [theme, setTheme] = useState<Theme>('dark');
   const [fontSize, setFontSize] = useState(DEFAULT_FONT);
   const [pos, setPos] = useState({ x: 20, y: 20 });
@@ -141,14 +146,25 @@ export function OverlayApp({ onReady, onClose }: Props) {
         currentWordsRef.current = [...currentWordsRef.current, word];
         setCurrentWords([...currentWordsRef.current]);
       },
+      // Move the live gloss into a finalized block (shown as "refining…") and clear
+      // the live line so a new utterance can start. Returns the block id.
+      beginBlock: (gloss) => {
+        const id = _blockId++;
+        setPastBlocks((prev) => [
+          ...prev,
+          { id, gloss, sentence: '', refining: true, timestamp: new Date() },
+        ]);
+        currentWordsRef.current = [];
+        setCurrentWords([]);
+        return id;
+      },
+      // Swap the block's text for the rewritten sentence and stop its spinner.
+      resolveBlock: (id, sentence) => {
+        setPastBlocks((prev) =>
+          prev.map((b) => (b.id === id ? { ...b, sentence, refining: false } : b)),
+        );
+      },
       clear: () => {
-        if (currentWordsRef.current.length > 0) {
-          const sentence = currentWordsRef.current.join(' ');
-          setPastBlocks((prev) => [
-            ...prev,
-            { id: _blockId++, sentence, timestamp: new Date() },
-          ]);
-        }
         currentWordsRef.current = [];
         setCurrentWords([]);
       },
@@ -395,7 +411,10 @@ export function OverlayApp({ onReady, onClose }: Props) {
         {pastBlocks.map((block) => (
           <div key={block.id} className="sentence-block">
             <div className="sentence-timestamp">{fmtTime(block.timestamp)}</div>
-            <div className="sentence-text">{block.sentence}</div>
+            <div className="sentence-text">
+              {block.refining ? block.gloss : (block.sentence || block.gloss)}
+              {block.refining && <span className="refining-tag"> · refining…</span>}
+            </div>
           </div>
         ))}
 
@@ -404,6 +423,14 @@ export function OverlayApp({ onReady, onClose }: Props) {
             {currentSentence || <span className="empty-hint">Waiting for signs…</span>}
             {currentWords.length > 0 && <span className="cursor" />}
           </div>
+          <button
+            className="speak-btn"
+            onClick={onSpeak}
+            disabled={currentWords.length === 0}
+            title="Finish this sentence and speak it now"
+          >
+            Speak
+          </button>
         </div>
       </div>
 
