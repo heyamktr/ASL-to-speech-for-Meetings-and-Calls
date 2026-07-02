@@ -45,26 +45,34 @@ navigator.mediaDevices.getUserMedia = async function (constraints) {
   ]);
 };
 
-// Listen for words to speak — sent by the content script (index.tsx)
+// Listen for a completed sentence to speak — sent by the content script once an
+// utterance is finalized (index.tsx). We speak the WHOLE sentence at once (not
+// word-by-word) so participants hear a natural, complete sentence.
 window.addEventListener('message', async (event) => {
   if (event.source !== window) return;
-  if (event.data?.type !== 'ASL_SPEAK_WORD') return;
+  if (event.data?.type !== 'ASL_SPEAK_SENTENCE') return;
   if (!audioCtx || !mixDest) return;
 
-  const { word, ttsEndpoint, rate, pitch } = event.data as {
-    word: string;
+  const { text, ttsEndpoint, rate, pitch } = event.data as {
+    text: string;
     ttsEndpoint: string;
     rate: number;
     pitch: number;
   };
+  if (!text || !text.trim()) return;
 
   // AudioContext may be suspended until a user gesture — resume it
   if (audioCtx.state === 'suspended') await audioCtx.resume();
 
   try {
-    // Call Dev B's TTS endpoint — expects audio bytes back (WAV/MP3/OGG)
-    const url = `${ttsEndpoint}?text=${encodeURIComponent(word)}&rate=${rate}&pitch=${pitch}`;
-    const response = await fetch(url);
+    // Server-side TTS returns WAV bytes we can mix into the outgoing mic stream.
+    // (rate/pitch are 0.5–2.0 browser multipliers, not server words-per-minute, so
+    //  we let the server use its own rate and only apply them to the local fallback.)
+    const response = await fetch(ttsEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
     if (!response.ok) throw new Error(`TTS endpoint returned ${response.status}`);
 
     const arrayBuffer = await response.arrayBuffer();
@@ -72,13 +80,13 @@ window.addEventListener('message', async (event) => {
 
     const source = audioCtx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(mixDest);  // inject directly into the mic stream Mix
+    source.connect(mixDest);  // inject directly into the mic stream mix
     source.start();
   } catch (err) {
     // Fallback: speak to the system speaker (participants won't hear this,
-    // but at least the ASL user hears their own word confirmed)
+    // but at least the ASL user hears their own sentence confirmed)
     console.warn('[ASL Inject] TTS endpoint failed, falling back to speechSynthesis:', err);
-    const utterance = new SpeechSynthesisUtterance(word);
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = rate;
     utterance.pitch = pitch;
     if (voicePrefs.voiceURI) {
