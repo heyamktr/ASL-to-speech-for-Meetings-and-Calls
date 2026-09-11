@@ -2,6 +2,11 @@
 
 > A privacy-first Chrome extension that translates American Sign Language into spoken voice **in real time** during Google Meet, Zoom Web, Messenger, and Microsoft Teams — so deaf and hard-of-hearing users can be heard without any change on their participants' end.
 
+<p align="center">
+  <img src="docs/images/demo-light.webp" width="49%" alt="ASL Interpreter overlay in light mode during a video call, showing live captions and word history" />
+  <img src="docs/images/demo-dark.webp" width="49%" alt="ASL Interpreter overlay in dark mode during a video call, showing live captions and word history" />
+</p>
+
 ---
 
 ## What It Does
