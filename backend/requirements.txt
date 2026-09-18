@@ -7,3 +7,4 @@ onnxruntime
 numpy
 python-dotenv
 pyttsx3
+google-genai

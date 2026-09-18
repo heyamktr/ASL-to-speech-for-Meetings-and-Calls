@@ -11,6 +11,14 @@ export interface StoredSettings {
   speechRate: number;
   speechPitch: number;
   ttsEndpoint: string;
+  // ── LLM sentence overlay ──────────────────────────────────────────────────
+  // When on, a completed utterance (the accumulated gloss words) is sent to the
+  // backend /refine endpoint and rewritten into one natural English sentence
+  // before it is shown and spoken. Off = the raw space-joined words are used.
+  llmEnabled: boolean;
+  refineEndpoint: string;
+  // Milliseconds of no new sign before an utterance is auto-finalized (spoken).
+  autoSpeakMs: number;
 }
 
 export type DetectionState = 'idle' | 'no_hand' | 'thinking' | 'predicted';
@@ -31,6 +39,9 @@ const SETTINGS_DEFAULTS: StoredSettings = {
   speechRate: 1.0,
   speechPitch: 1.0,
   ttsEndpoint: 'https://asl-to-speech-for-meetings-and-calls-sunlit-wind-7569.fly.dev/tts',
+  llmEnabled: true,
+  refineEndpoint: 'https://asl-to-speech-for-meetings-and-calls-sunlit-wind-7569.fly.dev/refine',
+  autoSpeakMs: 2500,
 };
 
 const STATE_DEFAULTS: RuntimeState = {

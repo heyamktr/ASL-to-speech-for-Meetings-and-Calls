@@ -34,5 +34,16 @@ class Settings:
     tts_rate: int = int(os.getenv("TTS_RATE", "170"))         # words per minute
     tts_max_chars: int = int(os.getenv("TTS_MAX_CHARS", "300"))
 
+    # ── LLM sentence refinement (ASL gloss → natural English) ─────────────────
+    # A recognized utterance is a list of isolated WLASL words in signed order
+    # ("gloss"). This layer rewrites that into one grammatical, punctuated English
+    # sentence for the caption + voice output. Falls back to a deterministic local
+    # join when disabled or when the API is unavailable (see app/refine.py).
+    llm_enabled: bool = os.getenv("LLM_ENABLED", "1") not in ("0", "false", "False")
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    llm_model: str = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+    llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "256"))
+    llm_max_words: int = int(os.getenv("LLM_MAX_WORDS", "60"))
+
 
 settings = Settings()
